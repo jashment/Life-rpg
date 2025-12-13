@@ -1,136 +1,133 @@
 'use client'
 import { useState, useEffect } from 'react';
-import { processLog } from './actions';
-import { Achievement } from './types';
+import { processLog, generateDailyQuests } from './actions';
+import { Achievement, Quest } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function Home() {
-        const [log, setLog] = useState('');
-        const [achievements, setAchievements] = useState<Achievement[]>([]);
-        const [loading, setLoading] = useState(false);
+    const [quests, setQuests] = useState<Quest[]>([]);
+    const [totalXP, setTotalXP] = useState(0);
+    const [loading, setLoading] = useState(false);
 
-        // 1. Load data from phone storage on startup
-        useEffect(() => {
-                const saved = localStorage.getItem('rpg_achievements');
-                if (saved) {
-                        try {
-                                setAchievements(JSON.parse(saved));
-                        } catch (e) {
-                                console.error("Failed to load achievements", e);
+    // Load saved data
+    useEffect(() => {
+        const savedQuests = localStorage.getItem('rpg_quests');
+        const savedXP = localStorage.getItem('rpg_xp');
+
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (savedQuests) setQuests(JSON.parse(savedQuests));
+        if (savedXP) setTotalXP(parseInt(savedXP));
+    }, []);
+
+    // Save data
+    useEffect(() => {
+        localStorage.setItem('rpg_quests', JSON.stringify(quests));
+        localStorage.setItem('rpg_xp', totalXP.toString());
+    }, [quests, totalXP]);
+
+    const handleGenerate = async () => {
+        setLoading(true);
+        const data = await generateDailyQuests();
+        console.log(data)
+
+        if (data.quests) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const formattedQuests = data.quests.map((q: any) => ({
+                ...q,
+                id: uuidv4(),
+                isCompleted: false
+            }));
+            setQuests(formattedQuests);
+        }
+        setLoading(false);
+    };
+
+    const toggleQuest = (id: string, xp: number) => {
+        setQuests(prev => prev.map(q => {
+            if (q.id === id) {
+                // If we are checking it (it was false), add XP. If unchecking, subtract.
+                const newStatus = !q.isCompleted;
+                if (newStatus) setTotalXP(x => x + xp);
+                else setTotalXP(x => x - xp);
+                return { ...q, isCompleted: newStatus };
+            }
+            return q;
+        }));
+    };
+
+    const getCategoryColor = (type: string) => {
+        switch (type) {
+        case 'HEALTH': return 'bg-green-900 border-green-700 text-green-100';
+        case 'CODE': return 'bg-blue-900 border-blue-700 text-blue-100';
+        default: return 'bg-purple-900 border-purple-700 text-purple-100';
+        }
+    };
+
+    return (
+        <main className="min-h-screen bg-black text-white p-4 max-w-md mx-auto font-sans">
+
+            {/* HEADER */}
+            <div className="sticky top-0 bg-black/90 backdrop-blur-sm z-10 pb-4 border-b border-gray-800 mb-6">
+                <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-600">
+                    Quest Board
+                </h1>
+                <div className="flex justify-between items-center mt-2">
+                    <div className="text-gray-400 text-sm">Level {Math.floor(totalXP / 100) + 1}</div>
+                    <div className="text-2xl font-mono font-bold text-yellow-500">{totalXP} XP</div>
+                </div>
+            </div>
+
+            {/* GENERATE BUTTON */}
+            {quests.length === 0 && (
+                <div className="text-center py-10">
+                    <p className="text-gray-500 mb-4">A new day awaits, Hero.</p>
+                    <button
+                        onClick={handleGenerate}
+                        disabled={loading}
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-900/50">
+                        {loading ? "Summoning Quests..." : "⚔️ Generate Daily Quests"}
+                    </button>
+                </div>
+            )}
+
+            {/* QUEST LIST */}
+            <div className="space-y-3 pb-20">
+                {quests.map(q => (
+                    <div
+                        key={q.id}
+                        onClick={() => toggleQuest(q.id, q.xp)}
+                        className={`
+              p-4 rounded-xl border relative transition-all duration-200 active:scale-95 cursor-pointer
+              ${q.isCompleted ? 'opacity-50 grayscale bg-gray-900 border-gray-800' : getCategoryColor(q.type)}
+            `}>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className={`font-bold text-lg ${q.isCompleted ? 'line-through' : ''}`}>
+                                    {q.title}
+                                </h3>
+                                <p className="text-sm opacity-80 mt-1">{q.task}</p>
+                            </div>
+                            <div className="bg-black/30 px-2 py-1 rounded text-xs font-mono whitespace-nowrap">
+                                {q.isCompleted ? 'DONE' : `+${q.xp} XP`}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* RESET BUTTON (Bottom) */}
+            {quests.length > 0 && (
+                <button
+                    onClick={() => {
+                        if (confirm("Start a new day? Current quests will be lost.")) {
+                            setQuests([]);
                         }
-                }
-        }, []);
+                    }}
+                    className="fixed bottom-6 right-6 bg-gray-800 text-gray-400 p-3 rounded-full shadow-lg border border-gray-700">
+                    🔄 New Day
+                </button>
+            )}
 
-        // 2. Save data to phone storage whenever it changes
-        useEffect(() => {
-                localStorage.setItem('rpg_achievements', JSON.stringify(achievements));
-        }, [achievements]);
-
-        // 3. Calculate Level and XP
-        // Default to 0 if xp is missing (backward compatibility)
-        const totalXP = achievements.reduce((acc, curr) => acc + ((curr.xp || 10) * curr.count), 0);
-        const currentLevel = Math.floor(totalXP / 100) + 1;
-        const nextLevelXP = currentLevel * 100;
-
-        const handleLog = async () => {
-                if (!log) return;
-                setLoading(true);
-
-                // Call the Server Action (AI)
-                const result = await processLog(log, achievements);
-
-                if (result.type === 'MATCH') {
-                        // Logic for existing achievement
-                        setAchievements(prev => prev.map(a =>
-                                a.id === result.id
-                                        ? { ...a, count: a.count + 1, lastEarned: new Date().toISOString() }
-                                        : a
-                        ));
-                } else if (result.type === 'NEW') {
-                        // Logic for new achievement
-                        const newBadge: Achievement = {
-                                id: uuidv4(),
-                                title: result.newAchievement.title,
-                                description: result.newAchievement.description,
-                                emoji: result.newAchievement.emoji,
-                                xp: result.newAchievement.xp || 10, // Fallback to 10 if AI forgets
-                                count: 1,
-                                lastEarned: new Date().toISOString()
-                        };
-                        setAchievements(prev => [newBadge, ...prev]);
-                }
-
-                setLog('');
-                setLoading(false);
-        };
-
-        return (
-                <main className="min-h-screen bg-black text-white p-6 max-w-md mx-auto font-sans">
-
-                        {/* HEADER: Level & XP Display */}
-                        <div className="flex justify-between items-end mb-6 border-b border-gray-800 pb-4">
-                                <div>
-                                        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-                                                Life RPG
-                                        </h1>
-                                        <p className="text-gray-400 text-sm mt-1">Level {currentLevel}</p>
-                                </div>
-                                <div className="text-right">
-                                        <div className="text-2xl font-bold text-yellow-500">{totalXP} XP</div>
-                                        <div className="text-xs text-gray-500">Next Level: {nextLevelXP} XP</div>
-                                </div>
-                        </div>
-
-                        {/* INPUT AREA */}
-                        <div className="space-y-4 mb-8">
-                                <textarea
-                                        value={log}
-                                        onChange={e => setLog(e.target.value)}
-                                        className="w-full bg-gray-900 border border-gray-700 p-4 rounded-xl text-lg focus:ring-2 focus:ring-purple-500 outline-none placeholder-gray-600"
-                                        placeholder="What did you conquer today?"
-                                        rows={3}
-                                />
-                                <button
-                                        onClick={handleLog}
-                                        disabled={loading}
-                                        className="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-xl font-bold transition-all disabled:opacity-50 active:scale-95"
-                                >
-                                        {loading ? "Consulting the Oracle..." : "Claim XP"}
-                                </button>
-                        </div>
-
-                        {/* ACHIEVEMENT LIST */}
-                        <div className="space-y-3 pb-10">
-                                {achievements.length === 0 && (
-                                        <div className="text-center text-gray-600 py-10 italic">
-                                                Your legend begins with a single deed...
-                                        </div>
-                                )}
-
-                                {achievements.map(a => (
-                                        <div key={a.id} className="bg-gray-800 p-4 rounded-xl flex items-center gap-4 border border-gray-700 relative overflow-hidden shadow-lg">
-
-                                                {/* XP Badge (Top Right) */}
-                                                <div className="absolute top-0 right-0 bg-yellow-900/50 text-yellow-200 text-xs px-2 py-1 rounded-bl-lg font-mono border-b border-l border-yellow-900">
-                                                        +{a.xp || 10} XP
-                                                </div>
-
-                                                {/* Emoji Icon */}
-                                                <span className="text-4xl filter drop-shadow-md">{a.emoji}</span>
-
-                                                {/* Text Content */}
-                                                <div className="flex-1 min-w-0">
-                                                        <h3 className="font-bold text-lg text-purple-300 truncate">{a.title}</h3>
-                                                        <p className="text-sm text-gray-400 line-clamp-2">{a.description}</p>
-                                                </div>
-
-                                                {/* Level Counter (Bottom Right) */}
-                                                <div className="bg-gray-900 px-3 py-1 rounded-full text-xs font-mono text-gray-500 border border-gray-800">
-                                                        Lvl {a.count}
-                                                </div>
-                                        </div>
-                                ))}
-                        </div>
-                </main>
-        );
+        </main>
+    );
 }
