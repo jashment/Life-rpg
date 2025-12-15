@@ -52,44 +52,56 @@ export async function processLog(userLog: string, currentAchievements: Achieveme
 }
 
 export async function generateDailyQuests() {
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) return { type: "ERROR", message: "No API Key" };
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) return { type: "ERROR", message: "No API Key" };
 
-    try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // temperature: 1.1 makes it very creative/random
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.5-flash", 
+      generationConfig: { temperature: 1.1 } 
+    });
 
-        const prompt = `
-            Generate 10 "Daily Quests" for a Software Engineer who wants to gamify their life.
-            
-            Mix the categories:
-            - 3 Health (Stretching, Water, Sun)
-            - 4 Productivity/Coding (Clean code, Learn something, Git commit)
-            - 3 Life/Fun (Read, Music, Kindness)
-            
-            Give them RPG-style titles.
-            Assign XP between 10 (easy) and 50 (hard).
-            
-            RETURN JSON ONLY. Format:
-            {
-                "quests": [
-                { 
-                    "title": "Potion of Clarity", 
-                    "task": "Drink water", 
-                    "xp": 10,
-                    "type": "HEALTH" 
-                }
-                ]
-            }
-        `;
+    // 1. Pick a random "Vibe" for the day so it's not always the same
+    const themes = ["Barbarian (Physical)", "Bard (Social)", "Wizard (Intellectual)", "Rogue (Stealth/Chores)", "Monk (Mindfulness)", "Merchant (Finance)"];
+    const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
-        const result = await model.generateContent(prompt);
-        console.log(result)
-        const text = result.response.text().replace(/```json|```/g, "").trim();
-        return JSON.parse(text);
+    const prompt = `
+      Generate 10 "Daily Quests" for a generic human life (NOT focused on tech).
+      
+      THEME FOR TODAY: ${randomTheme} (Flavor the titles based on this).
+      
+      Mix these categories (approximate):
+      - 3 Physical (Movement, Food, Sleep)
+      - 3 "Adulting" (Chores, Finance, Planning)
+      - 2 Social/Kindness (Family, Friends, Strangers)
+      - 2 Creativity/Learning (Reading, Hobbies)
+      
+      CRITICAL INSTRUCTIONS:
+      - Do NOT repeat the same generic tasks (like "Drink water") every time. Vary them.
+      - Make the titles sound like an RPG quest.
+      - XP between 10-100 based on difficulty.
+      
+      RETURN JSON ONLY. Format:
+      {
+        "quests": [
+          { 
+            "title": "Clean the Stables", 
+            "task": "Do the dishes or clean one room", 
+            "xp": 30,
+            "type": "LIFE" 
+          }
+        ]
+      }
+    `;
 
-    } catch (error) {
-        console.error("Quest Generation Failed:", error);
-        return { type: "ERROR" };
-    }
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().replace(/```json|```/g, "").trim();
+    return JSON.parse(text);
+
+  } catch (error) {
+    console.error("Quest Generation Failed:", error);
+    return { type: "ERROR" };
+  }
 }

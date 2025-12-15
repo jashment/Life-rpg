@@ -14,5 +14,5 @@ export type Quest = {
     task: string;       
     xp: number;
     isCompleted: boolean;
-    type: 'HEALTH' | 'CODE' | 'LIFE';
+    type: 'HEALTH' | 'WORK' | 'LIFE' | 'SOCIAL';
 };
