@@ -5,12 +5,28 @@ import { getAchievements, saveAchievement } from './achievement-actions';
 import { Achievement, Quest } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
+function calculateLevel(xp: number): { level: number; currentXP: number; xpForNextLevel: number } {
+    let level = 1;
+    let xpRemaining = xp;
+    let xpNeeded = 100;
+    
+    while (xpRemaining >= xpNeeded) {
+        xpRemaining -= xpNeeded;
+        level++;
+        xpNeeded = Math.floor(100 * Math.pow(1.5, level - 1));
+    }
+    
+    return { level, currentXP: xpRemaining, xpForNextLevel: xpNeeded };
+}
+
 export default function Home() {
     const [quests, setQuests] = useState<Quest[]>([]);
     const [achievements, setAchievements] = useState<Achievement[]>([]);
     const [totalXP, setTotalXP] = useState(0);
     const [loading, setLoading] = useState(false);
     const [showAchievements, setShowAchievements] = useState(false);
+    
+    const levelInfo = calculateLevel(totalXP);
 
     useEffect(() => {
         const savedQuests = localStorage.getItem('rpg_quests');
@@ -48,10 +64,14 @@ export default function Home() {
         const wasCompleted = quest.isCompleted;
         const newStatus = !wasCompleted;
         
+        if (newStatus) {
+            setTotalXP(x => x + xp);
+        } else {
+            setTotalXP(x => x - xp);
+        }
+        
         setQuests(prev => prev.map(q => {
             if (q.id === id) {
-                if (newStatus) setTotalXP(x => x + xp);
-                else setTotalXP(x => x - xp);
                 return { ...q, isCompleted: newStatus };
             }
             return q;
@@ -98,8 +118,20 @@ export default function Home() {
                     Quest Board
                 </h1>
                 <div className="flex justify-between items-center mt-2">
-                    <div className="text-gray-400 text-sm">Level {Math.floor(totalXP / 100) + 1}</div>
+                    <div className="text-gray-400 text-sm">Level {levelInfo.level}</div>
                     <div className="text-2xl font-mono font-bold text-yellow-500">{totalXP} XP</div>
+                </div>
+                <div className="mt-2">
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>{levelInfo.currentXP} / {levelInfo.xpForNextLevel} XP</span>
+                        <span>Next level</span>
+                    </div>
+                    <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                            className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-300"
+                            style={{ width: `${(levelInfo.currentXP / levelInfo.xpForNextLevel) * 100}%` }}
+                        />
+                    </div>
                 </div>
             </div>
 
