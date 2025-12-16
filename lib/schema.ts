@@ -12,5 +12,15 @@ export const achievements = pgTable("achievements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const questHistory = pgTable("quest_history", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  task: text("task").notNull(),
+  questType: text("quest_type").notNull(),
+  generatedAt: timestamp("generated_at").notNull().defaultNow(),
+});
+
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = typeof achievements.$inferInsert;
+export type QuestHistory = typeof questHistory.$inferSelect;
+export type InsertQuestHistory = typeof questHistory.$inferInsert;

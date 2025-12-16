@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { processLog, generateDailyQuests } from './actions';
 import { getAchievements, saveAchievement } from './achievement-actions';
+import { saveQuestsToHistory } from './quest-history-actions';
 import { Achievement, Quest } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -46,7 +47,6 @@ export default function Home() {
     const handleGenerate = async () => {
         setLoading(true);
         const data = await generateDailyQuests();
-        console.log(data)
 
         if (data.quests) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,6 +56,12 @@ export default function Home() {
                 isCompleted: false
             }));
             setQuests(formattedQuests);
+            
+            await saveQuestsToHistory(data.quests.map((q: any) => ({
+                title: q.title,
+                task: q.task,
+                type: q.type
+            })));
         }
         setLoading(false);
     };

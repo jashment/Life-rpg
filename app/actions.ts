@@ -2,6 +2,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Achievement } from "./types";
+import { getRecentQuests } from "./quest-history-actions";
 
 export async function processLog(userLog: string, currentAchievements: Achievement[]) {
     const apiKey = process.env.GOOGLE_API_KEY;
@@ -56,39 +57,61 @@ export async function generateDailyQuests() {
   if (!apiKey) return { type: "ERROR", message: "No API Key" };
 
   try {
+    const recentQuests = await getRecentQuests(30);
+    
     const genAI = new GoogleGenerativeAI(apiKey);
-    // temperature: 1.1 makes it very creative/random
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash", 
-      generationConfig: { temperature: 1.1 } 
+      generationConfig: { temperature: 1.2 } 
     });
 
-    // 1. Pick a random "Vibe" for the day so it's not always the same
-    const themes = ["Barbarian (Physical)", "Bard (Social)", "Wizard (Intellectual)", "Rogue (Stealth/Chores)", "Monk (Mindfulness)", "Merchant (Finance)"];
+    const themes = [
+      "Barbarian (Physical Strength)", 
+      "Bard (Social & Performance)", 
+      "Wizard (Intellectual & Learning)", 
+      "Rogue (Stealth & Organization)", 
+      "Monk (Mindfulness & Wellness)", 
+      "Merchant (Finance & Deals)",
+      "Ranger (Outdoors & Nature)",
+      "Paladin (Helping Others)",
+      "Artificer (DIY & Creativity)"
+    ];
     const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
+    const recentQuestsList = recentQuests.length > 0 
+      ? `\n\nPREVIOUS QUESTS TO AVOID (do NOT repeat these or similar tasks):\n${recentQuests.map(q => `- ${q.title}: ${q.task}`).join('\n')}`
+      : '';
+
     const prompt = `
-      Generate 10 "Daily Quests" for a generic human life (NOT focused on tech).
+      Generate 10 unique "Daily Quests" for a generic human life (NOT focused on tech).
       
-      THEME FOR TODAY: ${randomTheme} (Flavor the titles based on this).
+      THEME FOR TODAY: ${randomTheme} (Flavor the titles based on this class archetype).
+      ${recentQuestsList}
+      
+      VARIETY REQUIREMENTS:
+      - AT LEAST 75% of quests must be COMPLETELY DIFFERENT from the previous quests listed above
+      - Be creative! Think of unusual, specific, interesting activities
+      - Avoid generic tasks like "drink water", "go for a walk", "clean a room" - make them specific and unique
       
       Mix these categories (approximate):
-      - 3 Physical (Movement, Food, Sleep)
-      - 3 "Adulting" (Chores, Finance, Planning)
-      - 2 Social/Kindness (Family, Friends, Strangers)
-      - 2 Creativity/Learning (Reading, Hobbies)
+      - 3 Physical (Movement, Food, Sleep - but specific and varied)
+      - 3 "Adulting" (Chores, Finance, Planning - but unique angles)
+      - 2 Social/Kindness (Family, Friends, Strangers - specific acts)
+      - 2 Creativity/Learning (Reading, Hobbies - varied activities)
       
-      CRITICAL INSTRUCTIONS:
-      - Do NOT repeat the same generic tasks (like "Drink water") every time. Vary them.
-      - Make the titles sound like an RPG quest.
-      - XP between 10-100 based on difficulty.
+      EXAMPLES OF GOOD VARIETY:
+      - Instead of "Exercise" → "Practice 10 minutes of shadowboxing" or "Dance to 3 songs"
+      - Instead of "Clean room" → "Organize one drawer by color" or "Dust the forgotten corners"
+      - Instead of "Read" → "Read one short story aloud" or "Learn 5 words in a new language"
+      
+      Make the titles sound like epic RPG quests. XP between 10-100 based on difficulty.
       
       RETURN JSON ONLY. Format:
       {
         "quests": [
           { 
-            "title": "Clean the Stables", 
-            "task": "Do the dishes or clean one room", 
+            "title": "Epic Quest Title", 
+            "task": "Specific unique task description", 
             "xp": 30,
             "type": "LIFE" 
           }
