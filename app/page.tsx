@@ -1,25 +1,27 @@
 'use client'
 import { useState, useEffect } from 'react';
 import { processLog, generateDailyQuests } from './actions';
+import { getAchievements, saveAchievement } from './achievement-actions';
 import { Achievement, Quest } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function Home() {
     const [quests, setQuests] = useState<Quest[]>([]);
+    const [achievements, setAchievements] = useState<Achievement[]>([]);
     const [totalXP, setTotalXP] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [showAchievements, setShowAchievements] = useState(false);
 
-    // Load saved data
     useEffect(() => {
         const savedQuests = localStorage.getItem('rpg_quests');
         const savedXP = localStorage.getItem('rpg_xp');
 
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (savedQuests) setQuests(JSON.parse(savedQuests));
         if (savedXP) setTotalXP(parseInt(savedXP));
+
+        getAchievements().then(setAchievements);
     }, []);
 
-    // Save data
     useEffect(() => {
         localStorage.setItem('rpg_quests', JSON.stringify(quests));
         localStorage.setItem('rpg_xp', totalXP.toString());
@@ -42,17 +44,41 @@ export default function Home() {
         setLoading(false);
     };
 
-    const toggleQuest = (id: string, xp: number) => {
+    const toggleQuest = async (id: string, xp: number, quest: Quest) => {
+        const wasCompleted = quest.isCompleted;
+        const newStatus = !wasCompleted;
+        
         setQuests(prev => prev.map(q => {
             if (q.id === id) {
-                // If we are checking it (it was false), add XP. If unchecking, subtract.
-                const newStatus = !q.isCompleted;
                 if (newStatus) setTotalXP(x => x + xp);
                 else setTotalXP(x => x - xp);
                 return { ...q, isCompleted: newStatus };
             }
             return q;
         }));
+
+        if (newStatus) {
+            const result = await processLog(quest.title + ": " + quest.task, achievements);
+            if (result.type === "MATCH" && result.id) {
+                const updated = await saveAchievement({
+                    id: result.id,
+                    title: achievements.find(a => a.id === result.id)?.title || quest.title,
+                    description: achievements.find(a => a.id === result.id)?.description || quest.task,
+                    emoji: achievements.find(a => a.id === result.id)?.emoji || "⚔️",
+                    xp: xp,
+                });
+                setAchievements(updated);
+            } else if (result.type === "NEW" && result.newAchievement) {
+                const updated = await saveAchievement({
+                    id: uuidv4(),
+                    title: result.newAchievement.title,
+                    description: result.newAchievement.description,
+                    emoji: result.newAchievement.emoji,
+                    xp: result.newAchievement.xp || xp,
+                });
+                setAchievements(updated);
+            }
+        }
     };
 
     const getCategoryColor = (type: string) => {
@@ -95,7 +121,7 @@ export default function Home() {
                 {quests.map(q => (
                     <div
                         key={q.id}
-                        onClick={() => toggleQuest(q.id, q.xp)}
+                        onClick={() => toggleQuest(q.id, q.xp, q)}
                         className={`
               p-4 rounded-xl border relative transition-all duration-200 active:scale-95 cursor-pointer
               ${q.isCompleted ? 'opacity-50 grayscale bg-gray-900 border-gray-800' : getCategoryColor(q.type)}
@@ -115,18 +141,66 @@ export default function Home() {
                 ))}
             </div>
 
-            {/* RESET BUTTON (Bottom) */}
-            {quests.length > 0 && (
-                <button
-                    onClick={() => {
-                        if (confirm("Start a new day? Current quests will be lost.")) {
-                            setQuests([]);
-                        }
-                    }}
-                    className="fixed bottom-6 right-6 bg-gray-800 text-gray-400 p-3 rounded-full shadow-lg border border-gray-700">
-                    🔄 New Day
-                </button>
+            {/* ACHIEVEMENTS SECTION */}
+            {showAchievements && (
+                <div className="fixed inset-0 bg-black/95 z-50 p-4 overflow-y-auto">
+                    <div className="max-w-md mx-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-600">
+                                Achievements
+                            </h2>
+                            <button
+                                onClick={() => setShowAchievements(false)}
+                                className="text-gray-400 text-2xl"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        {achievements.length === 0 ? (
+                            <p className="text-gray-500 text-center py-10">No achievements yet. Complete quests to earn them!</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {achievements.map(a => (
+                                    <div key={a.id} className="p-4 rounded-xl bg-gradient-to-r from-yellow-900/30 to-orange-900/30 border border-yellow-700/50">
+                                        <div className="flex items-start gap-3">
+                                            <span className="text-3xl">{a.emoji}</span>
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-yellow-400">{a.title}</h3>
+                                                <p className="text-sm text-gray-400 mt-1">{a.description}</p>
+                                                <div className="flex justify-between mt-2 text-xs">
+                                                    <span className="text-yellow-500">+{a.xp} XP</span>
+                                                    <span className="text-gray-500">Earned {a.count}x</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
+
+            {/* BOTTOM BUTTONS */}
+            <div className="fixed bottom-6 right-6 flex gap-2">
+                <button
+                    onClick={() => setShowAchievements(true)}
+                    className="bg-yellow-700 text-yellow-100 p-3 rounded-full shadow-lg border border-yellow-600"
+                >
+                    🏆
+                </button>
+                {quests.length > 0 && (
+                    <button
+                        onClick={() => {
+                            if (confirm("Start a new day? Current quests will be lost.")) {
+                                setQuests([]);
+                            }
+                        }}
+                        className="bg-gray-800 text-gray-400 p-3 rounded-full shadow-lg border border-gray-700">
+                        🔄
+                    </button>
+                )}
+            </div>
 
         </main>
     );
