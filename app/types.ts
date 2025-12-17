@@ -16,3 +16,12 @@ export type Quest = {
     isCompleted: boolean;
     type: 'HEALTH' | 'WORK' | 'LIFE' | 'SOCIAL';
 };
+
+export type Item = {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  rarity: string;
+  type: string;
+};

@@ -20,6 +20,19 @@ export const questHistory = pgTable("quest_history", {
   generatedAt: timestamp("generated_at").notNull().defaultNow(),
 });
 
+export const items = pgTable("items", {
+  id: serial("id").primaryKey(),
+  uniqueId: text("unique_id").notNull().unique(), 
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  emoji: text("emoji").notNull(),
+  rarity: text("rarity").notNull(), 
+  type: text("type").notNull(),     
+  dateFound: timestamp("date_found").notNull().defaultNow(),
+});
+
+export type Item = typeof items.$inferSelect;
+export type InsertItem = typeof items.$inferInsert;
 export type Achievement = typeof achievements.$inferSelect;
 export type InsertAchievement = typeof achievements.$inferInsert;
 export type QuestHistory = typeof questHistory.$inferSelect;
