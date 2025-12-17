@@ -52,3 +52,34 @@ npm run start -- -p 5000 -H 0.0.0.0
 - Host set to 0.0.0.0 for Replit compatibility
 - Next.js configured to allow all dev origins for proxy support
 - Database connection via DATABASE_URL environment variable
+
+## Running with Docker (outside Replit)
+
+To run this project locally with Docker:
+
+1. Copy `.env.example` to `.env` and add your Google API key:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Start the database and app:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Push the database schema:
+   ```bash
+   docker-compose exec app npx drizzle-kit push
+   ```
+
+4. Access the app at http://localhost:5000
+
+To stop:
+```bash
+docker-compose down
+```
+
+To stop and remove data:
+```bash
+docker-compose down -v
+```
