@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: life_rpg
     ports:
-      - "5001:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -19,7 +19,7 @@ services:
     container_name: life-rpg-app
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/life_rpg
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
