@@ -26,6 +26,7 @@ export default function Home() {
     const [totalXP, setTotalXP] = useState(0);
     const [loading, setLoading] = useState(false);
     const [showAchievements, setShowAchievements] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     
     const levelInfo = calculateLevel(totalXP);
 
@@ -46,6 +47,7 @@ export default function Home() {
 
     const handleGenerate = async () => {
         setLoading(true);
+        setError(null);
         const data = await generateDailyQuests();
 
         if (data.quests) {
@@ -62,6 +64,8 @@ export default function Home() {
                 task: q.task,
                 type: q.type
             })));
+        } else if (data.type === "ERROR") {
+            setError("Failed to generate quests. The AI service might be temporarily unavailable. Please try again in a few moments.");
         }
         setLoading(false);
     };
@@ -141,6 +145,13 @@ export default function Home() {
                 </div>
             </div>
 
+            {/* ERROR MESSAGE */}
+            {error && (
+                <div className="bg-red-900/30 border border-red-700 text-red-200 p-4 rounded-lg mb-4">
+                    {error}
+                </div>
+            )}
+
             {/* GENERATE BUTTON */}
             {quests.length === 0 && (
                 <div className="text-center py-10">
@@ -148,7 +159,7 @@ export default function Home() {
                     <button
                         onClick={handleGenerate}
                         disabled={loading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-900/50">
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-900/50 disabled:opacity-50">
                         {loading ? "Summoning Quests..." : "⚔️ Generate Daily Quests"}
                     </button>
                 </div>
@@ -232,6 +243,7 @@ export default function Home() {
                         onClick={() => {
                             if (confirm("Start a new day? Current quests will be lost.")) {
                                 setQuests([]);
+                                setError(null);
                             }
                         }}
                         className="bg-gray-800 text-gray-400 p-3 rounded-full shadow-lg border border-gray-700">
