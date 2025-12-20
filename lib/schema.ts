@@ -31,6 +31,31 @@ export const items = pgTable("items", {
   dateFound: timestamp("date_found").notNull().defaultNow(),
 });
 
+// ... existing imports
+
+export const bosses = pgTable("bosses", {
+  id: serial("id").primaryKey(),
+  uniqueId: text("unique_id").notNull().unique(),
+  name: text("name").notNull(),       // e.g. "The Procrastination Dragon"
+  description: text("description").notNull(),
+  level: integer("level").notNull(),  // e.g. 5, 10, 15
+  hp: integer("hp").notNull(),
+  maxHp: integer("max_hp").notNull(),
+  status: text("status").notNull(),   // ALIVE, DEFEATED
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const skills = pgTable("skills", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),       // e.g. "Loot Goblin"
+  effect: text("effect").notNull(),   // e.g. "increase_rare_drop_chance"
+  level: integer("level").notNull().default(1),
+  unlockedAt: timestamp("unlocked_at").notNull().defaultNow(),
+});
+
+export type Boss = typeof bosses.$inferSelect;
+export type InsertBoss = typeof bosses.$inferInsert;
+export type Skill = typeof skills.$inferSelect;
 export type Item = typeof items.$inferSelect;
 export type InsertItem = typeof items.$inferInsert;
 export type Achievement = typeof achievements.$inferSelect;

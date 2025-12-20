@@ -6,6 +6,9 @@ import { saveQuestsToHistory } from './quest-history-actions';
 import { Achievement, Quest, Item } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { checkForLoot, getInventory } from '../lib/item-actions';
+import { checkBossSpawn, fightBoss } from '../lib/boss-actions';
+import { Boss } from "@/lib/schema";
+
 
 
 function calculateLevel(xp: number): { level: number; currentXP: number; xpForNextLevel: number } {
@@ -31,8 +34,10 @@ export default function Home() {
     const [inventory, setInventory] = useState<Item[]>([]);
 const [showInventory, setShowInventory] = useState(false);
 const [newLoot, setNewLoot] = useState<Item | null>(null);
+const [activeBoss, setActiveBoss] = useState<Boss | null>(null);
+const [battleLog, setBattleLog] = useState<string | null>(null);
+const [selectedItems, setSelectedItems] = useState<string[]>([]); // Array of item IDs
 
-    
     // Prevent double-fetching in React Strict Mode
     const hasCheckedDate = useRef(false);
     
@@ -72,10 +77,17 @@ const [newLoot, setNewLoot] = useState<Item | null>(null);
                     await handleGenerate(true);
                 }
             }
-        };
+        }
+    // Check if boss should appear
+    if (levelInfo.level % 5 === 0) {
+         checkBossSpawn(levelInfo.level).then(boss => {
+             if (boss) setActiveBoss(boss);
+         });
+    }
+
 
         initializeData();
-    }, []);
+    }, [levelInfo.level]);
 
     // Save state on changes
     useEffect(() => {
@@ -119,6 +131,30 @@ const [newLoot, setNewLoot] = useState<Item | null>(null);
         }
         setLoading(false);
     };
+
+    const handleFight = async () => {
+    if (!activeBoss) return;
+    setLoading(true);
+
+    // Fight using first 3 items (or whichever user selected)
+    // For MVP, let's just use the top 3 best items in inventory automatically
+    const bestItems = inventory.slice(0, 3).map(i => i.id);
+
+    const result = await fightBoss(activeBoss.uniqueId, bestItems);
+
+    setBattleLog(result.log);
+
+    if (result.newStatus === 'DEFEATED') {
+        alert("BOSS DEFEATED! SKILL POINT UNLOCKED!");
+        setActiveBoss(null); // Close modal
+        // TODO: Add logic to award a Skill Point here
+    } else {
+        // Update local boss HP to show damage
+        setActiveBoss(prev => prev ? { ...prev, hp: result.remainingHp } : null);
+    }
+    setLoading(false);
+};
+
 
     const toggleQuest = async (id: string, xp: number, quest: Quest) => {
         const wasCompleted = quest.isCompleted;
@@ -291,6 +327,15 @@ const [newLoot, setNewLoot] = useState<Item | null>(null);
 
             {/* BOTTOM BUTTONS */}
             <div className="fixed bottom-6 right-6 flex gap-2">
+                {activeBoss && (
+    <button
+        onClick={() => /* Open Boss Modal Logic */ {}}
+        className="fixed bottom-20 right-6 bg-red-600 text-white p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.7)] animate-bounce border-2 border-red-900 z-40 font-bold"
+    >
+        BOSS!
+    </button>
+)}
+
                 <button
                     onClick={() => setShowInventory(true)}
                     className="bg-blue-900 text-blue-100 p-3 rounded-full shadow-lg border border-blue-700"
