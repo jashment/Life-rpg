@@ -327,14 +327,78 @@ const [selectedItems, setSelectedItems] = useState<string[]>([]); // Array of it
 
             {/* BOTTOM BUTTONS */}
             <div className="fixed bottom-6 right-6 flex gap-2">
-                {activeBoss && (
-    <button
-        onClick={() => /* Open Boss Modal Logic */ {}}
-        className="fixed bottom-20 right-6 bg-red-600 text-white p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.7)] animate-bounce border-2 border-red-900 z-40 font-bold"
-    >
-        BOSS!
-    </button>
-)}
+                            {/* BOSS ALERT BUTTON */}
+            {activeBoss && !showBossModal && (
+                <button
+                    onClick={() => setShowBossModal(true)}
+                    className="fixed bottom-24 right-6 bg-red-600 text-white w-14 h-14 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.7)] animate-bounce border-2 border-red-900 z-40 flex items-center justify-center font-bold text-xs"
+                >
+                    BOSS!
+                </button>
+            )}
+
+            {/* BOSS BATTLE MODAL */}
+            {showBossModal && activeBoss && (
+                <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col p-4 animate-in fade-in duration-300">
+                    
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-6">
+                        <h2 className="text-3xl font-black text-red-600 tracking-widest uppercase">
+                            Boss Battle
+                        </h2>
+                        <button onClick={() => setShowBossModal(false)} className="text-gray-500 text-2xl">✕</button>
+                    </div>
+
+                    {/* Boss Visuals */}
+                    <div className="flex-1 flex flex-col items-center justify-center space-y-6">
+                        <div className="text-8xl animate-pulse">👹</div>
+                        
+                        <div className="text-center">
+                            <h3 className="text-2xl font-bold text-white">{activeBoss.name}</h3>
+                            <p className="text-red-400 italic">"{activeBoss.description}"</p>
+                        </div>
+
+                        {/* HP BAR */}
+                        <div className="w-full max-w-xs bg-gray-900 h-8 rounded-full border-2 border-gray-700 relative overflow-hidden">
+                            <div 
+                                className="h-full bg-red-600 transition-all duration-500"
+                                style={{ width: `${(activeBoss.hp / activeBoss.maxHp) * 100}%` }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">
+                                {activeBoss.hp} / {activeBoss.maxHp} HP
+                            </div>
+                        </div>
+
+                        {/* Battle Log */}
+                        <div className="w-full max-w-xs bg-gray-900/50 p-4 rounded-lg h-32 overflow-y-auto text-sm space-y-2 border border-gray-800">
+                            {battleLog.length === 0 ? (
+                                <p className="text-gray-500 text-center italic">The beast awaits your move...</p>
+                            ) : (
+                                battleLog.map((log, i) => (
+                                    <p key={i} className="text-gray-300 border-b border-gray-800 pb-1 last:border-0">
+                                        {log}
+                                    </p>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Controls */}
+                    <div className="mt-6">
+                        <button
+                            onClick={handleFight}
+                            disabled={loading}
+                            className="w-full bg-red-700 hover:bg-red-600 text-white font-black text-xl py-6 rounded-2xl shadow-[0_0_30px_rgba(220,38,38,0.4)] border-t-4 border-red-500 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
+                        >
+                            {loading ? "ATTACKING..." : "⚔️ ATTACK"}
+                        </button>
+                        <p className="text-center text-gray-500 text-xs mt-3">
+                            Attacking uses your top 3 inventory items automatically.
+                        </p>
+                    </div>
+                </div>
+            )}
+
 
                 <button
                     onClick={() => setShowInventory(true)}
