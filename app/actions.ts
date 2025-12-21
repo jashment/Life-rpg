@@ -3,6 +3,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Achievement } from "./types";
 import { getRecentQuests } from "./quest-history-actions";
+import { generateAIContent } from "./ai-service";
+import { items, skills, bosses, achievements, questHistory } from "@/lib/schema";
+import { db } from "@/lib/db";
 
 export async function processLog(userLog: string, currentAchievements: Achievement[]) {
     const apiKey = process.env.GOOGLE_API_KEY;
@@ -53,36 +56,30 @@ export async function processLog(userLog: string, currentAchievements: Achieveme
 }
 
 export async function generateDailyQuests() {
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) return { type: "ERROR", message: "No API Key" };
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) return { type: "ERROR", message: "No API Key" };
 
-  try {
-    const recentQuests = await getRecentQuests(30);
-    
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash", 
-      generationConfig: { temperature: 1.2 } 
-    });
+    try {
+        const recentQuests = await getRecentQuests(30);
 
-    const themes = [
-      "Barbarian (Physical Strength)", 
-      "Bard (Social & Performance)", 
-      "Wizard (Intellectual & Learning)", 
-      "Rogue (Stealth & Organization)", 
-      "Monk (Mindfulness & Wellness)", 
-      "Merchant (Finance & Deals)",
-      "Ranger (Outdoors & Nature)",
-      "Paladin (Helping Others)",
-      "Artificer (DIY & Creativity)"
-    ];
-    const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+        const themes = [
+            "Barbarian (Physical Strength)", 
+            "Bard (Social & Performance)", 
+            "Wizard (Intellectual & Learning)", 
+            "Rogue (Stealth & Organization)", 
+            "Monk (Mindfulness & Wellness)", 
+            "Merchant (Finance & Deals)",
+            "Ranger (Outdoors & Nature)",
+            "Paladin (Helping Others)",
+            "Artificer (DIY & Creativity)"
+        ];
+        const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
-    const recentQuestsList = recentQuests.length > 0 
-      ? `\n\nPREVIOUS QUESTS TO AVOID (do NOT repeat these or similar tasks):\n${recentQuests.map(q => `- ${q.title}: ${q.task}`).join('\n')}`
-      : '';
+        const recentQuestsList = recentQuests.length > 0 
+            ? `\n\nPREVIOUS QUESTS TO AVOID (do NOT repeat these or similar tasks):\n${recentQuests.map(q => `- ${q.title}: ${q.task}`).join('\n')}`
+            : '';
 
-    const prompt = `
+        const prompt = `
       Generate 10 unique "Daily Quests" for a generic human life (NOT focused on tech).
       
       THEME FOR TODAY: ${randomTheme} (Flavor the titles based on this class archetype).
@@ -119,12 +116,27 @@ export async function generateDailyQuests() {
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, "").trim();
-    return JSON.parse(text);
+        const data = await generateAIContent(prompt);
 
-  } catch (error) {
-    console.error("Quest Generation Failed:", error);
-    return { type: "ERROR" };
-  }
+        if (!data || data.type === 'ERROR') return null;
+
+        return data;
+    } catch (error) {
+        console.error("Quest Generation Failed:", error);
+        return { type: "ERROR" };
+    }
+}
+
+export async function resetAccount() {
+    // We delete in a specific order to avoid foreign key errors (if you had them)
+    await db.delete(items);
+    await db.delete(skills);
+    await db.delete(bosses);
+    await db.delete(achievements);
+    await db.delete(questHistory);
+    // Quest table might not exist in your schema if you are only using QuestHistory, 
+    // but if you have a 'quests' table for daily active quests, delete it too:
+    // await db.delete(quests); 
+  
+    return { success: true };
 }
