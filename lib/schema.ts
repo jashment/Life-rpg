@@ -26,7 +26,8 @@ export const items = pgTable("items", {
     name: text("name").notNull(),
     description: text("description").notNull(),
     emoji: text("emoji").notNull(),
-    rarity: text("rarity").notNull(), 
+    rarity: text("rarity").notNull(),
+    power: integer("power").notNull().default(0),
     type: text("type").notNull(),     
     dateFound: timestamp("date_found").notNull().defaultNow(),
 });
@@ -41,6 +42,7 @@ export const bosses = pgTable("bosses", {
     level: integer("level").notNull(),  // e.g. 5, 10, 15
     hp: integer("hp").notNull(),
     maxHp: integer("max_hp").notNull(),
+    defense: integer("defense").notNull().default(100),
     status: text("status").notNull(),   // ALIVE, DEFEATED
     createdAt: timestamp("created_at").notNull().defaultNow(),
 });

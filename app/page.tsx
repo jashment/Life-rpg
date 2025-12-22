@@ -190,6 +190,11 @@ export default function Home() {
         }
         setLoading(false);
     };
+        
+    const bestPower = inventory
+        .sort((a, b) => b.power - a.power)
+        .slice(0, 3)
+        .reduce((sum, i) => sum + i.power, 0);
 
     return (
         <main className="min-h-screen bg-black text-white p-4 max-w-md mx-auto font-sans">
@@ -451,6 +456,9 @@ export default function Home() {
                                             }`}>
                                             {item.rarity}
                                         </div>
+                                        <div className="absolute top-2 left-2 bg-black/50 px-1 rounded text-[10px] font-bold text-yellow-500 border border-yellow-500/30">
+                                            ⚡ {item.power}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -528,6 +536,23 @@ export default function Home() {
 
                     {/* Controls */}
                     <div className="mt-6">
+                        <div className="mb-4 bg-gray-900 p-3 rounded-lg border border-gray-700">
+                            <div className="flex justify-between text-sm mb-1">
+                                <span className="text-gray-400">Your Power</span>
+                                <span className="text-gray-400">Boss Defense</span>
+                            </div>
+                            <div className="flex justify-between font-bold text-xl">
+                                <span className={bestPower >= activeBoss.defense ? "text-green-500" : "text-red-500"}>
+                                    ⚡ {bestPower}
+                                </span>
+                                <span className="text-white">🛡️ {activeBoss.defense}</span>
+                            </div>
+                            {bestPower < activeBoss.defense && (
+                                <p className="text-red-400 text-xs mt-2 text-center">
+                                    ⚠️ You are too weak! Find better loot first.
+                                </p>
+                            )}
+                        </div>
                         <button
                             onClick={handleFight}
                             disabled={loading}

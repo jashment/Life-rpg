@@ -8,12 +8,15 @@ import { generateAIContent } from "../app/ai-service";
 
 async function generateBoss(level: number) {
 
+    const defense = level * 30;
+  
+
     const prompt = `
     Generate a scary RPG Boss Monster that represents a "Life Obstacle" for a Level ${level} player.
     Examples: "The Lord of Laziness", "The Specter of Burnout", "The Golem of Debt".
     
     Stats:
-    HP should be approx ${level * 100}.
+    HP should be approx ${level * 100}, Defense should be approx ${defense}
     
     RETURN JSON:
     { "name": "Name", "description": "Scary description", "hp": 500 }
@@ -30,7 +33,8 @@ async function generateBoss(level: number) {
         level: level,
         hp: data.hp,
         maxHp: data.hp,
-        status: 'ALIVE'
+        status: 'ALIVE',
+        defense: defense,
     }).returning();
 
     return newBoss;
@@ -71,11 +75,20 @@ export async function fightBoss(bossId: string, itemIds: string[]) {
     // For simplicity, we assume we passed the item details or fetch all
     const allItems = await db.select().from(items);
     const equipped = allItems.filter(i => itemIds.includes(i.uniqueId));
+    const playerPower = equipped.reduce((sum, item) => sum + (item.power || 0), 0);
+
+    const powerRatio = playerPower / (boss.defense || 1);
+    const winChance = Math.min(0.95, Math.max(0.1, powerRatio - 0.2));
+
+    const roll = Math.random();
+    const isWin = roll < winChance;
 
     const prompt = `
     BATTLE SIMULATION:
-    Player Level: ${boss.level}
+    Player Power: ${playerPower}
     Boss: ${boss.name} (HP: ${boss.hp})
+    Result: ${isWin ? "WIN" : "LOSS"}.
+    Items Used: ${equipped.map(i => i.name).join(", ")}.
     
     Player uses these items:
     ${equipped.map(i => `- ${i.name} (${i.rarity} ${i.type})`).join('\n')}
@@ -87,7 +100,9 @@ export async function fightBoss(bossId: string, itemIds: string[]) {
     
     DECIDE:
     1. Did the player win? (Win chance increases with better loot).
-    2. Write a short, exciting 2-sentence battle log.
+    2. Write a short, exciting 2-sentence battle log. 
+      If LOSS: Explain how the user's gear was too weak.
+      If WIN: Explain how the items overpowered the boss.
     3. Calculate damage dealt.
     
     RETURN JSON:
@@ -97,6 +112,8 @@ export async function fightBoss(bossId: string, itemIds: string[]) {
     const battle = await generateAIContent(prompt);
 
     if (!battle || battle.type === 'ERROR') return null;
+  
+    const damageDealt = isWin ? boss.hp : Math.floor(boss.hp * 0.1);
 
     // Update DB
     let newStatus = 'ALIVE';
@@ -110,7 +127,8 @@ export async function fightBoss(bossId: string, itemIds: string[]) {
     await db.update(bosses).set({ hp: remainingHp, status: newStatus }).where(eq(bosses.uniqueId, bossId));
 
     return { 
-        ...battle, 
+        ...battle,
+        damageDealt,
         remainingHp, 
         bossName: boss.name,
         newStatus 

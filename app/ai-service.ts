@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Groq } from "groq-sdk"; // npm install groq-sdk
 
 // CONFIGURATION
 const OLLAMA_MODEL = "llama3.2"; // or "mistral"
@@ -76,27 +77,58 @@ async function callLocalOllama(prompt: string) {
     }
 }
 
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+async function callGroq(prompt: string) {
+    try {
+        const completion = await groq.chat.completions.create({
+            messages: [
+                { role: "system", content: "You are a Game Master. Return JSON only." },
+                { role: "user", content: prompt }
+            ],
+            model: "llama-3.3-70b-versatile", // Fast and free
+            response_format: { type: "json_object" }, // Enforces JSON
+        });
+
+        const content = completion.choices[0]?.message?.content || "{}";
+        return JSON.parse(content);
+    } catch (e) {
+        console.error("Groq Failed", e);
+        return { type: "ERROR" };
+    }
+}
+
 export async function generateAIContent(prompt: string): Promise<any> {
     console.log("🤖 Asking AI Gateway...");
 
-    // STRATEGY 1: Try Gemini (Fast, Cloud)
+    // 1. TIER 1: GEMINI (The Brain)
     try {
         const apiKey = process.env.GOOGLE_API_KEY;
         if (!apiKey) throw new Error("No Gemini Key");
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        // We append "Return JSON" strictly for Gemini
+        // We append "Return JSON" strictly
         const result = await model.generateContent(prompt + "\n\nRETURN JSON ONLY.");
         const text = result.response.text();
     
         return parseCleanJson(text);
 
-    } catch (error) {
-        console.warn("⚠️ Gemini failed (Quota or Error). Switching to Local Ollama...", error);
-    
-        // STRATEGY 2: Fallback to Ollama (Local, Unlimited)
-        return await callLocalOllama(prompt);
+    } catch (geminiError) {
+        console.warn("⚠️ Gemini failed. Switching to Tier 2 (Groq)...", geminiError);
+
+        // 2. TIER 2: GROQ (The Speedster)
+        try {
+            if (!process.env.GROQ_API_KEY) throw new Error("No Groq Key");
+        
+            return await callGroq(prompt);
+
+        } catch (groqError) {
+            console.warn("⚠️ Groq failed. Switching to Tier 3 (Local Ollama)...", groqError);
+
+            // 3. TIER 3: OLLAMA (The Bunker)
+            return await callLocalOllama(prompt);
+        }
     }
 }

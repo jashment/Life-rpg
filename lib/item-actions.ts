@@ -29,35 +29,36 @@ export async function checkForLoot(questTitle: string) {
     if (Math.random() > 0.7) rarity = "RARE";
     if (Math.random() > 0.9) rarity = "EPIC";
     if (Math.random() > 0.98) rarity = "LEGENDARY";
+  
+    // Define Power Ranges based on the Rarity we just rolled
+    let minPower = 1, maxPower = 10;
+    if (rarity === "RARE") { minPower = 20; maxPower = 40; }
+    if (rarity === "EPIC") { minPower = 50; maxPower = 75; }
+    if (rarity === "LEGENDARY") { minPower = 80; maxPower = 120; }
 
     // 3. Ask AI to forge the item
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) return null;
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Matching your other actions
 
     const prompt = `
     The player just completed a real-life RPG quest: "${questTitle}".
     Generate a fantasy Loot Item that relates to this task.
     
     Rarity: ${rarity} (Make the name and description match the rarity).
+    Power Level: Choose a number between ${minPower} and ${maxPower} that also matches the rarity.
     
     Examples:
     - Quest: "Drink Water" -> Item: "Potion of Hydration" (Common)
     - Quest: "Fix Server Bug" -> Item: "Hammer of the Banhammer" (Rare)
     
     RETURN JSON ONLY:
-    { "name": "Item Name", "description": "Funny flavor text", "emoji": "⚔️", "type": "WEAPON"|"ARMOR"|"POTION"|"RELIC" }
+    { "name": "Item Name", "description": "Funny flavor text", "emoji": "⚔️", "type": "WEAPON"|"ARMOR"|"POTION"|"RELIC", "power": number }
   `;
 
     try {
         const data = await generateAIContent(prompt); // <--- Handles Gemini OR Ollama automatically
 
         if (!data || data.type === 'ERROR') return null;
-        // const result = await model.generateContent(prompt);
-        // const text = result.response.text().replace(/```json|```/g, "").trim();
-        // const data = JSON.parse(text);
 
         // 4. Save to Drizzle DB
         const newId = uuidv4();
@@ -67,7 +68,8 @@ export async function checkForLoot(questTitle: string) {
             description: data.description,
             emoji: data.emoji,
             rarity: rarity,
-            type: data.type
+            type: data.type,
+            power: data.power
         });
 
         // Return the item object to display in UI
@@ -77,7 +79,8 @@ export async function checkForLoot(questTitle: string) {
             description: data.description,
             emoji: data.emoji,
             rarity: rarity,
-            type: data.type
+            type: data.type,
+            power: data.power
         };
 
     } catch (e) {

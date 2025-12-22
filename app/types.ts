@@ -23,5 +23,6 @@ export type Item = {
   description: string;
   emoji: string;
   rarity: string;
-  type: string;
+    type: string;
+    power: number;
 };
