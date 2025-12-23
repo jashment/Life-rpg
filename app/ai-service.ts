@@ -1,14 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Groq } from "groq-sdk"; // npm install groq-sdk
+import { Groq } from "groq-sdk";
 
-// CONFIGURATION
-const OLLAMA_MODEL = "llama3.2"; // or "mistral"
+const OLLAMA_MODEL = "llama3.2";
 const OLLAMA_URL = "http://127.0.0.1:11434/api/generate";
 
-// Helper to clean up Markdown code blocks from AI responses
 function parseCleanJson(text: string) {
     try {
-    // Remove ```json and ``` wrapping
         const clean = text.replace(/```json|```/g, "").trim();
         return JSON.parse(clean);
     } catch (e) {
@@ -28,48 +25,14 @@ async function callLocalOllama(prompt: string) {
                 model: OLLAMA_MODEL,
                 prompt: prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown.",
                 format: "json",
-                stream: true, // <--- ENABLE STREAMING
+                stream: false
             }),
         });
 
         if (!response.body) throw new Error("Ollama response has no body");
 
-        // Create a reader to process the stream
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = "";
-
-        process.stdout.write("🦙 Generating: "); // Start the line
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-      
-            // Ollama sends multiple JSON objects in one chunk sometimes
-            const lines = chunk.split("\n").filter((line) => line.trim() !== "");
-
-            for (const line of lines) {
-                try {
-                    const json = JSON.parse(line);
-                    if (json.response) {
-                        // 1. VISUAL PROGRESS: Print the word to your terminal
-                        process.stdout.write(json.response); 
-            
-                        // 2. ACCUMULATE: Build the final string
-                        fullText += json.response; 
-                    }
-                    if (json.done) {
-                        console.log("\n✅ Done!"); // New line when finished
-                    }
-                } catch (e) {
-                    // Sometimes a chunk ends in the middle of a JSON line; ignore parse errors for partials
-                }
-            }
-        }
-
-        return parseCleanJson(fullText);
+        const data = await response.json();
+        return parseCleanJson(data.response);
 
     } catch (err) {
         console.error("\n🔥 ALL AI SERVICES FAILED.", err);
