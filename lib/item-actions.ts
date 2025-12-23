@@ -3,7 +3,6 @@
 import { db } from "@/lib/db";
 import { items } from "@/lib/schema";
 import { desc } from "drizzle-orm";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { v4 as uuidv4 } from 'uuid';
 import { generateAIContent } from "../app/ai-service";
 
@@ -16,6 +15,7 @@ export async function getInventory() {
         emoji: i.emoji,
         rarity: i.rarity,
         type: i.type,
+        power: i.power
     }));
 }
 
