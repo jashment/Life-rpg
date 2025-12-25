@@ -6,6 +6,7 @@ import { getRecentQuests } from "./quest-history-actions";
 import { generateAIContent } from "./ai-service";
 import { items, skills, bosses, achievements, questHistory } from "@/lib/schema";
 import { db } from "@/lib/db";
+import { eq } from "drizzle-orm";
 
 export async function processLog(userLog: string, currentAchievements: Achievement[]) {
     const apiKey = process.env.GOOGLE_API_KEY;
@@ -55,12 +56,12 @@ export async function processLog(userLog: string, currentAchievements: Achieveme
     }
 }
 
-export async function generateDailyQuests() {
+export async function generateDailyQuests(userId: string) {
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) return { type: "ERROR", message: "No API Key" };
 
     try {
-        const recentQuests = await getRecentQuests(30);
+        const recentQuests = await getRecentQuests(userId, 30);
 
         const themes = [
             "Barbarian (Physical Strength)", 
@@ -127,16 +128,14 @@ export async function generateDailyQuests() {
     }
 }
 
-export async function resetAccount() {
-    // We delete in a specific order to avoid foreign key errors (if you had them)
-    await db.delete(items);
-    await db.delete(skills);
-    await db.delete(bosses);
-    await db.delete(achievements);
-    await db.delete(questHistory);
-    // Quest table might not exist in your schema if you are only using QuestHistory, 
-    // but if you have a 'quests' table for daily active quests, delete it too:
-    // await db.delete(quests); 
+export async function resetAccount(userId: string) {
+    if (!userId) return { success: false, message: "No user ID provided" };
+
+    await db.delete(items).where(eq(items.userId, userId));
+    await db.delete(skills).where(eq(skills.userId, userId));
+    await db.delete(bosses).where(eq(bosses.userId, userId));
+    await db.delete(achievements).where(eq(achievements.userId, userId));
+    await db.delete(questHistory).where(eq(questHistory.userId, userId));
   
     return { success: true };
 }

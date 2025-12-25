@@ -1,8 +1,17 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, uuid } from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+    id: uuid("id").primaryKey(),
+    email: text("email"),
+    username: text("username"),
+    level: integer("level").default(1),
+    createdAt: timestamp("created_at").defaultNow(),
+});
 
 export const achievements = pgTable("achievements", {
     id: serial("id").primaryKey(),
-    uniqueId: text("unique_id").notNull().unique(),
+    userId: uuid("user_id").references(() => users.id).notNull(),
+    uniqueId: text("unique_id").notNull(),
     title: text("title").notNull(),
     description: text("description").notNull(),
     emoji: text("emoji").notNull(),
@@ -14,6 +23,7 @@ export const achievements = pgTable("achievements", {
 
 export const questHistory = pgTable("quest_history", {
     id: serial("id").primaryKey(),
+    userId: uuid("user_id").references(() => users.id).notNull(),
     title: text("title").notNull(),
     task: text("task").notNull(),
     questType: text("quest_type").notNull(),
@@ -22,7 +32,8 @@ export const questHistory = pgTable("quest_history", {
 
 export const items = pgTable("items", {
     id: serial("id").primaryKey(),
-    uniqueId: text("unique_id").notNull().unique(), 
+    userId: uuid("user_id").references(() => users.id).notNull(),
+    uniqueId: text("unique_id").notNull(), 
     name: text("name").notNull(),
     description: text("description").notNull(),
     emoji: text("emoji").notNull(),
@@ -32,14 +43,13 @@ export const items = pgTable("items", {
     dateFound: timestamp("date_found").notNull().defaultNow(),
 });
 
-// ... existing imports
-
 export const bosses = pgTable("bosses", {
     id: serial("id").primaryKey(),
-    uniqueId: text("unique_id").notNull().unique(),
-    name: text("name").notNull(),       // e.g. "The Procrastination Dragon"
+    userId: uuid("user_id").references(() => users.id).notNull(),
+    uniqueId: text("unique_id").notNull(),
+    name: text("name").notNull(),
     description: text("description").notNull(),
-    level: integer("level").notNull(),  // e.g. 5, 10, 15
+    level: integer("level").notNull(),
     hp: integer("hp").notNull(),
     maxHp: integer("max_hp").notNull(),
     defense: integer("defense").notNull().default(100),
@@ -49,8 +59,9 @@ export const bosses = pgTable("bosses", {
 
 export const skills = pgTable("skills", {
     id: serial("id").primaryKey(),
-    name: text("name").notNull(),       // e.g. "Loot Goblin"
-    effect: text("effect").notNull(),   // e.g. "increase_rare_drop_chance"
+    userId: uuid("user_id").references(() => users.id).notNull(),
+    name: text("name").notNull(),
+    effect: text("effect").notNull(),
     level: integer("level").notNull().default(1),
     unlockedAt: timestamp("unlocked_at").notNull().defaultNow(),
 });

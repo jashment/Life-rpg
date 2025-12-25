@@ -2,11 +2,11 @@
 
 import { db } from "@/lib/db";
 import { bosses, items } from "@/lib/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { v4 as uuidv4 } from 'uuid';
 import { generateAIContent } from "../app/ai-service";
 
-async function generateBoss(level: number) {
+async function generateBoss(userId: string, level: number) {
 
     const defense = level * 30;
   
@@ -27,6 +27,7 @@ async function generateBoss(level: number) {
     if (!data || data.type === 'ERROR') return null;
 
     const [newBoss] = await db.insert(bosses).values({
+        userId: userId,
         uniqueId: uuidv4(),
         name: data.name,
         description: data.description,
@@ -40,41 +41,53 @@ async function generateBoss(level: number) {
     return newBoss;
 }
 
-export async function checkBossSpawn(userLevel: number) {
+export async function checkBossSpawn(userId: string, userLevel: number) {
     // Bosses appear at level 5, 10, 15, etc.
     if (userLevel % 5 !== 0) return null;
 
     // Check if we already beat this level's boss
     const existing = await db.select().from(bosses).where(
-        and(eq(bosses.level, userLevel), eq(bosses.status, 'ALIVE'))
+        and(eq(bosses.userId, userId), eq(bosses.level, userLevel), eq(bosses.status, 'ALIVE'))
     );
 
     if (existing.length > 0) return existing[0];
 
     // If no alive boss exists for this level, check if we already killed one
     const dead = await db.select().from(bosses).where(
-        and(eq(bosses.level, userLevel), eq(bosses.status, 'DEFEATED'))
+        and(eq(bosses.userId, userId), eq(bosses.level, userLevel), eq(bosses.status, 'DEFEATED'))
     );
   
     if (dead.length > 0) return null; // Already beat the boss for this tier
 
     // SPAWN NEW BOSS
-    return await generateBoss(userLevel);
+    return await generateBoss(userId, userLevel);
 }
 
 
 
 // 2. FIGHT LOGIC
-export async function fightBoss(bossId: string, itemIds: string[]) {
+export async function fightBoss(userId: string, bossId: string, itemIds: string[]) {
     // Get the boss
-    const [boss] = await db.select().from(bosses).where(eq(bosses.uniqueId, bossId));
+    const [boss] = await db.select().from(bosses).where(
+        and(
+            eq(bosses.uniqueId, bossId),
+            eq(bosses.userId, userId)
+        )
+    );
     if (!boss || boss.status !== 'ALIVE') return { result: 'ERROR' };
 
     // Get the items used
     // In a real app we would query whereIn(items.uniqueId, itemIds)
     // For simplicity, we assume we passed the item details or fetch all
-    const allItems = await db.select().from(items);
-    const equipped = allItems.filter(i => itemIds.includes(i.uniqueId));
+    let equipped: any[] = [];
+    if (itemIds.length > 0) {
+        equipped = await db.select().from(items).where(
+            and(
+                eq(items.userId, userId),
+                inArray(items.uniqueId, itemIds)
+            )
+        );
+    }
     const playerPower = equipped.reduce((sum, item) => sum + (item.power || 0), 0);
 
     const powerRatio = playerPower / (boss.defense || 1);
@@ -112,6 +125,8 @@ export async function fightBoss(bossId: string, itemIds: string[]) {
     const battle = await generateAIContent(prompt);
 
     if (!battle || battle.type === 'ERROR') return null;
+    
+    const battleLog = battle?.log || (isWin ? "You defeated the boss!" : "You took a hit but survived.");
   
     const damageDealt = isWin ? boss.hp : Math.floor(boss.hp * 0.1);
 
@@ -124,10 +139,16 @@ export async function fightBoss(bossId: string, itemIds: string[]) {
         remainingHp = 0;
     }
 
-    await db.update(bosses).set({ hp: remainingHp, status: newStatus }).where(eq(bosses.uniqueId, bossId));
+    await db.update(bosses).set({ hp: remainingHp, status: newStatus }).where(
+        and(
+            eq(bosses.uniqueId, bossId),
+            eq(bosses.userId, userId)
+        )
+    );
 
     return { 
-        ...battle,
+        win: isWin,
+        log: battleLog,
         damageDealt,
         remainingHp, 
         bossName: boss.name,

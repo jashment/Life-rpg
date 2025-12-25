@@ -2,12 +2,12 @@
 
 import { db } from "@/lib/db";
 import { items } from "@/lib/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from 'uuid';
 import { generateAIContent } from "../app/ai-service";
 
-export async function getInventory() {
-    const result = await db.select().from(items).orderBy(desc(items.dateFound));
+export async function getInventory(userId: string) {
+    const result = await db.select().from(items).where(eq(items.userId, userId)).orderBy(desc(items.dateFound));
     return result.map(i => ({
         id: i.uniqueId,
         name: i.name,
@@ -19,7 +19,7 @@ export async function getInventory() {
     }));
 }
 
-export async function checkForLoot(questTitle: string) {
+export async function checkForLoot(userId: string,questTitle: string) {
     // 1. Roll the Dice (30% chance)
     const roll = Math.random();
     if (roll > 0.3) return null; // Bad luck, no loot
@@ -63,6 +63,7 @@ export async function checkForLoot(questTitle: string) {
         // 4. Save to Drizzle DB
         const newId = uuidv4();
         await db.insert(items).values({
+            userId: userId,
             uniqueId: newId,
             name: data.name,
             description: data.description,

@@ -2,12 +2,13 @@
 
 import { db } from "@/lib/db";
 import { questHistory } from "@/lib/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
-export async function getRecentQuests(limit: number = 30) {
+export async function getRecentQuests(userId: string, limit: number = 30) {
     const result = await db
         .select()
         .from(questHistory)
+        .where(eq(questHistory.userId, userId))
         .orderBy(desc(questHistory.generatedAt))
         .limit(limit);
   
@@ -18,11 +19,12 @@ export async function getRecentQuests(limit: number = 30) {
     }));
 }
 
-export async function saveQuestsToHistory(quests: { title: string; task: string; type: string }[]) {
+export async function saveQuestsToHistory(userId: string, quests: { title: string; task: string; type: string }[]) {
     if (quests.length === 0) return;
   
     await db.insert(questHistory).values(
         quests.map(q => ({
+            userId: userId,
             title: q.title,
             task: q.task,
             questType: q.type,

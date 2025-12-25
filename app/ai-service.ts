@@ -63,8 +63,6 @@ async function callGroq(prompt: string) {
 
 export async function generateAIContent(prompt: string): Promise<any> {
     console.log("🤖 Asking AI Gateway...");
-
-    // 1. TIER 1: GEMINI (The Brain)
     try {
         const apiKey = process.env.GOOGLE_API_KEY;
         if (!apiKey) throw new Error("No Gemini Key");
@@ -72,7 +70,6 @@ export async function generateAIContent(prompt: string): Promise<any> {
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        // We append "Return JSON" strictly
         const result = await model.generateContent(prompt + "\n\nRETURN JSON ONLY.");
         const text = result.response.text();
     
@@ -81,7 +78,6 @@ export async function generateAIContent(prompt: string): Promise<any> {
     } catch (geminiError) {
         console.warn("⚠️ Gemini failed. Switching to Tier 2 (Groq)...", geminiError);
 
-        // 2. TIER 2: GROQ (The Speedster)
         try {
             if (!process.env.GROQ_API_KEY) throw new Error("No Groq Key");
         
@@ -90,7 +86,6 @@ export async function generateAIContent(prompt: string): Promise<any> {
         } catch (groqError) {
             console.warn("⚠️ Groq failed. Switching to Tier 3 (Local Ollama)...", groqError);
 
-            // 3. TIER 3: OLLAMA (The Bunker)
             return await callLocalOllama(prompt);
         }
     }
