@@ -55,7 +55,7 @@ function AuthForm({ onLogin }: { onLogin: () => void }) {
         <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
             <div className="w-full max-w-sm border border-gray-800 p-6 rounded-xl bg-gray-900/50">
                 <h1 className="text-2xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-600">
-                    Manual of the Macabre
+                    Life RPG
                 </h1>
                 <form onSubmit={handleAuth} className="space-y-4">
                     <input 
