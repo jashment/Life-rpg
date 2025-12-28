@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-// We need the Supabase client to check who is logged in
 import { supabase } from "@/lib/supabase-client"; 
 import { processLog, generateDailyQuests, resetAccount } from "./actions";
 import { getAchievements, saveAchievement } from "./achievement-actions";
@@ -9,9 +8,11 @@ import { Achievement, Quest, Item } from "./types";
 import { v4 as uuidv4 } from "uuid";
 import { checkForLoot, getInventory } from "@/lib/item-actions";
 import { checkBossSpawn, fightBoss } from "@/lib/boss-actions";
-import { Boss } from "@/lib/schema"; 
+import { Boss } from "@/lib/schema";
+import AuthForm from "./components/AuthForm";
+import Header from "./components/Header";
+import GenerateButton from "./components/GenerateButton";
 
-// --- HELPER: Level Calc ---
 function calculateLevel(xp: number): {
     level: number;
     currentXP: number;
@@ -28,56 +29,6 @@ function calculateLevel(xp: number): {
     }
 
     return { level, currentXP: xpRemaining, xpForNextLevel: xpNeeded };
-}
-
-function AuthForm({ onLogin }: { onLogin: () => void }) {
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [isSignUp, setIsSignUp] = useState(false);
-
-    const handleAuth = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        if (isSignUp) {
-            const { error } = await supabase.auth.signUp({ email, password });
-            if (error) alert(error.message);
-            else alert("Check your email for the confirmation link!");
-        } else {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) alert(error.message);
-            else onLogin(); // Trigger parent refresh
-        }
-        setLoading(false);
-    };
-
-    return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-            <div className="w-full max-w-sm border border-gray-800 p-6 rounded-xl bg-gray-900/50">
-                <h1 className="text-2xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-600">
-                    Life RPG
-                </h1>
-                <form onSubmit={handleAuth} className="space-y-4">
-                    <input 
-                        type="email" placeholder="Email" required 
-                        className="w-full p-3 bg-black border border-gray-700 rounded text-white"
-                        value={email} onChange={e => setEmail(e.target.value)}/>
-                    <input 
-                        type="password" placeholder="Password" required 
-                        className="w-full p-3 bg-black border border-gray-700 rounded text-white"
-                        value={password} onChange={e => setPassword(e.target.value)}/>
-                    <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded font-bold">
-                        {loading ? "..." : (isSignUp ? "Sign Up" : "Login")}
-                    </button>
-                </form>
-                <button 
-                    onClick={() => setIsSignUp(!isSignUp)}
-                    className="w-full mt-4 text-xs text-gray-500 hover:text-white">
-                    {isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}
-                </button>
-            </div>
-        </div>
-    );
 }
 
 // --- MAIN PAGE ---
@@ -136,42 +87,8 @@ export default function Home() {
         checkUser();
     }, []);
 
-    
-
-    
-
-    // If not logged in, show Auth Screen
     if (authLoading) return <div className="bg-black min-h-screen flex items-center justify-center text-white">Loading...</div>;
     if (!user) return <AuthForm onLogin={checkUser} />;
-
-    // --- HANDLERS (Now using user.id) ---
-
-    const handleGenerate = async () => {
-        setLoading(true);
-        // PASS USER ID
-        const data = await generateDailyQuests(user.id);
-
-        if (data && data.quests) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const formattedQuests = data.quests.map((q: any) => ({
-                ...q,
-                id: uuidv4(),
-                isCompleted: false,
-            }));
-            setQuests(formattedQuests);
-
-            // PASS USER ID
-            await saveQuestsToHistory(
-                user.id,
-                data.quests.map((q: any) => ({
-                    title: q.title,
-                    task: q.task,
-                    type: q.type,
-                })),
-            );
-        }
-        setLoading(false);
-    };
 
     const toggleQuest = async (id: string, xp: number, quest: Quest) => {
         const wasCompleted = quest.isCompleted;
@@ -272,17 +189,6 @@ export default function Home() {
         }
     };
         
-    const handleLogout = async () => {
-        // 1. Tell Supabase to kill the session
-        await supabase.auth.signOut();
-        
-        // 2. Clear local state immediately
-        setUser(null);
-        setQuests([]);
-        setAchievements([]);
-        setInventory([]);
-    };
-        
     const bestPower = inventory
         .sort((a, b) => b.power - a.power)
         .slice(0, 3)
@@ -291,58 +197,10 @@ export default function Home() {
     return (
         <main className="min-h-screen bg-black text-white p-4 max-w-md mx-auto font-sans">
             {/* HEADER */}
-            <div className="sticky top-0 bg-black/90 backdrop-blur-sm z-10 pb-4 border-b border-gray-800 mb-6">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-600">
-                        Quest Board
-                    </h1>
-                    <button onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} className="text-xs text-gray-500 hover:text-white">
-                        Logout
-                    </button>
-                </div>
-                
-                <div className="flex justify-between items-center mt-2">
-                    <div className="text-gray-400 text-sm">
-                        Level {levelInfo.level}
-                    </div>
-                    <div className="text-2xl font-mono font-bold text-yellow-500">
-                        {totalXP} XP
-                    </div>
-                </div>
-                <div className="mt-2">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>
-                            {levelInfo.currentXP} / {levelInfo.xpForNextLevel}{" "}
-                            XP
-                        </span>
-                        <span>Next level</span>
-                    </div>
-                    <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-300"
-                            style={{
-                                width: `${(levelInfo.currentXP / levelInfo.xpForNextLevel) * 100}%`,
-                            }}/>
-                    </div>
-                </div>
-            </div>
+            <Header levelInfo={levelInfo} totalXP={totalXP} />
 
             {/* GENERATE BUTTON */}
-            {quests.length === 0 && (
-                <div className="text-center py-10">
-                    <p className="text-gray-500 mb-4">
-                        A new day awaits, Hero.
-                    </p>
-                    <button
-                        onClick={handleGenerate}
-                        disabled={loading}
-                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 py-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-900/50">
-                        {loading
-                            ? "Summoning Quests..."
-                            : "⚔️ Generate Daily Quests"}
-                    </button>
-                </div>
-            )}
+            {quests.length === 0 && (<GenerateButton user={user} loading={loading} setLoading={setLoading} setQuests={setQuests} />)}
 
             {/* QUEST LIST */}
             <div className="space-y-3 pb-20">
