@@ -30,19 +30,17 @@ const QuestList = ({ user, achievements, quests, setTotalXP, setQuests, setInven
         const wasCompleted = quest.isCompleted;
         const newStatus = !wasCompleted;
 
-        // Optimistic UI Update
         if (newStatus) setTotalXP((x: number) => x + xp);
         else setTotalXP((x: number) => x - xp);
 
-        setQuests((prev: any[]) =>
-            prev.map((q: { id: string; }) => {
+        setQuests((prev) =>
+            prev.map((q: Quest) => {
                 if (q.id === id) return { ...q, isCompleted: newStatus };
                 return q;
             }),
         );
 
         if (newStatus) {
-            // 1. Check for Loot (PASS USER ID)
             checkForLoot(user.id, quest.title).then((loot) => {
                 if (loot) {
                     setInventory((prev: any) => [loot, ...prev]);
@@ -50,7 +48,6 @@ const QuestList = ({ user, achievements, quests, setTotalXP, setQuests, setInven
                 }
             });
 
-            // 2. Process Achievement (PASS USER ID inside saveAchievement)
             const result = await processLog(
                 quest.title + ": " + quest.task,
                 achievements,
