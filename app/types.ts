@@ -25,4 +25,19 @@ export type Item = {
   rarity: string;
     type: string;
     power: number;
+    equipped: boolean;
+    placement?: string;
+    slot?: number;
+};
+
+export type User = {
+    id: string;
+    email?: string;
+};
+
+export type GeneratedQuest = {
+    title: string;
+    task: string;
+    xp: number;
+    type: 'HEALTH' | 'WORK' | 'LIFE' | 'SOCIAL';
 };

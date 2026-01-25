@@ -8,57 +8,79 @@ import { items, skills, bosses, achievements, questHistory } from "@/lib/schema"
 import { db } from "@/lib/db";
 import { eq } from "drizzle-orm";
 
-export async function processLog(userLog: string, currentAchievements: Achievement[]) {
-    const apiKey = process.env.GOOGLE_API_KEY;
+interface ProcessLogResponse {
+  type: "MATCH" | "NEW" | "ERROR";
+  id?: string;
+  newAchievement?: {
+    title: string;
+    description: string;
+    emoji: string;
+    xp: number;
+  };
+  message?: string;
+}
 
-    if (!apiKey) {
-        console.error("❌ ERROR: No API Key found in .env.local");
-        return { type: "ERROR", message: "API Key Missing" };
-    }
+export async function processLog(
+    userLog: string,
+    currentAchievements: Achievement[]
+): Promise<ProcessLogResponse> {
+    const prompt = `
+        You are the Game Master of a Life RPG. 
+        The user submitted a new log: "${userLog}".
+                                                  
+        Here is the player's existing Achievement List (JSON):${JSON.stringify(currentAchievements)}
+                                                                    
+        TASK:
+        1. Analyze the difficulty of the deed (1-5 scale).
+        2. Check if this log fits vaguely into an existing achievement category.
+        3. IF MATCH: Return the ID.
+        4. IF NEW: Create a witty title, description, emoji, and assign XP (Difficulty * 10).
+                                      
+        RETURN JSON ONLY. Format:
+        {
+            "type": "MATCH" | "NEW",
+            "id": "existing-id-if-match",
+            "newAchievement": {
+                "title": "Epic Title",
+                "description": "Short description",
+                "emoji": "🔥",
+                "xp": 30
+            }
+        }
+    `;
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-        const prompt = `
-            You are the Game Master of a Life RPG. 
-            The user submitted a new log: "${userLog}".
-                                                      
-            Here is the player's existing Achievement List (JSON):${JSON.stringify(currentAchievements)}
-                                                                        
-            TASK:
-            1. Analyze the difficulty of the deed (1-5 scale).
-            2. Check if this log fits vaguely into an existing achievement category.
-            3. IF MATCH: Return the ID.
-            4. IF NEW: Create a witty title, description, emoji, and assign XP (Difficulty * 10).
-                                          
-            RETURN JSON ONLY. Format:
-            {
-                "type": "MATCH" | "NEW",
-                "id": "existing-id-if-match",
-                "newAchievement": {
-                    "title": "Epic Title",
-                    "description": "Short description",
-                    "emoji": "🔥",
-                    "xp": 30
-                }
-            }
-        `;
-
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().replace(/```json|```/g, "").trim();
-
-        return JSON.parse(text);
-
+        const data = await generateAIContent(prompt);
+        if (!data || data.type === 'ERROR') {
+            return { type: "ERROR", message: "AI service failed" };
+        }
+        return data as ProcessLogResponse;
     } catch (error) {
         console.error("🔥 AI Crash:", error);
         return { type: "ERROR" }; // Prevents 502
     }
 }
 
-export async function generateDailyQuests(userId: string) {
+type GenerateDailyQuestsResponse = {
+  quests: {
+    title: string;
+    task: string;
+    xp: number;
+    type: string;
+  }[];
+} | {
+    type: "ERROR";
+    message: string;
+}
+
+export async function generateDailyQuests(
+    userId: string
+): Promise<GenerateDailyQuestsResponse | null> {
     const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) return { type: "ERROR", message: "No API Key" };
+    if (!apiKey) {
+        console.error("❌ ERROR: No API Key found in .env.local");
+        return null;
+    }
 
     try {
         const recentQuests = await getRecentQuests(userId, 30);
@@ -119,16 +141,23 @@ export async function generateDailyQuests(userId: string) {
 
         const data = await generateAIContent(prompt);
 
-        if (!data || data.type === 'ERROR') return null;
+        if (!data || !("quests" in data)) return null;
 
-        return data;
+        return data as GenerateDailyQuestsResponse;
     } catch (error) {
         console.error("Quest Generation Failed:", error);
-        return { type: "ERROR" };
+        return null;
     }
 }
 
-export async function resetAccount(userId: string) {
+interface ResetAccountResponse {
+  success: boolean;
+  message?: string;
+}
+
+export async function resetAccount(
+    userId: string
+): Promise<ResetAccountResponse> {
     if (!userId) return { success: false, message: "No user ID provided" };
 
     await db.delete(items).where(eq(items.userId, userId));

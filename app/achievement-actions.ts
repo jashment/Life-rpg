@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { achievements } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 
-export async function getAchievements(userId: string) {
+import { Achievement } from "./types";
+export async function getAchievements(userId: string): Promise<Achievement[]> {
     const result = await db.select()
         .from(achievements)
         .where(eq(achievements.userId, userId))
@@ -21,13 +22,16 @@ export async function getAchievements(userId: string) {
     }));
 }
 
-export async function saveAchievement(userId: string, achievement: {
-  id: string;
-  title: string;
-  description: string;
-  emoji: string;
-  xp: number;
-}) {
+export async function saveAchievement(
+    userId: string,
+    achievement: {
+    id: string;
+    title: string;
+    description: string;
+    emoji: string;
+    xp: number;
+  }
+): Promise<Achievement[]> {
     const existing = await db
         .select()
         .from(achievements)
@@ -60,7 +64,10 @@ export async function saveAchievement(userId: string, achievement: {
     return getAchievements(userId);
 }
 
-export async function incrementAchievementCount(userId: string, id: string) {
+export async function incrementAchievementCount(
+    userId: string,
+    id: string
+): Promise<Achievement[]> {
     const existing = await db
         .select()
         .from(achievements)

@@ -4,7 +4,16 @@ import { db } from "@/lib/db";
 import { questHistory } from "@/lib/schema";
 import { desc, eq } from "drizzle-orm";
 
-export async function getRecentQuests(userId: string, limit: number = 30) {
+interface RecentQuest {
+  title: string;
+  task: string;
+  type: string;
+}
+
+export async function getRecentQuests(
+    userId: string,
+    limit: number = 30
+): Promise<RecentQuest[]> {
     const result = await db
         .select()
         .from(questHistory)
@@ -19,7 +28,10 @@ export async function getRecentQuests(userId: string, limit: number = 30) {
     }));
 }
 
-export async function saveQuestsToHistory(userId: string, quests: { title: string; task: string; type: string }[]) {
+export async function saveQuestsToHistory(
+    userId: string,
+    quests: { title: string; task: string; type: string }[]
+): Promise<void> {
     if (quests.length === 0) return;
   
     await db.insert(questHistory).values(

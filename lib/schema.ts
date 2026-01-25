@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, uuid, boolean } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
     id: uuid("id").primaryKey(),
@@ -41,6 +41,9 @@ export const items = pgTable("items", {
     power: integer("power").notNull().default(0),
     type: text("type").notNull(),     
     dateFound: timestamp("date_found").notNull().defaultNow(),
+    equipped: boolean("equipped").notNull().default(false),
+    placement: text("placement"),
+    slot: integer("slot").default(0),
 });
 
 export const bosses = pgTable("bosses", {

@@ -61,7 +61,34 @@ async function callGroq(prompt: string) {
     }
 }
 
-export async function generateAIContent(prompt: string): Promise<any> {
+export type AIResponse = {
+  type: "MATCH" | "NEW" | "ERROR";
+  id?: string;
+  newAchievement?: {
+    title: string;
+    description: string;
+    emoji: string;
+    xp: number;
+  };
+  message?: string;
+  name?: string;
+  description?: string;
+  emoji?: string;
+  power?: number;
+  placement?: string;
+  hp?: number;
+  win?: boolean;
+  log?: string;
+  damageDealt?: number;
+  quests?: {
+    title: string;
+    task: string;
+    xp: number;
+    type: string;
+  }[];
+};
+
+export async function generateAIContent(prompt: string): Promise<AIResponse> {
     console.log("🤖 Asking AI Gateway...");
     try {
         const apiKey = process.env.GOOGLE_API_KEY;
@@ -81,7 +108,9 @@ export async function generateAIContent(prompt: string): Promise<any> {
         try {
             if (!process.env.GROQ_API_KEY) throw new Error("No Groq Key");
         
-            return await callGroq(prompt);
+            const groqResult = await callGroq(prompt);
+            if (groqResult.type === 'ERROR') throw new Error("Groq failed");
+            return groqResult;
 
         } catch (groqError) {
             console.warn("⚠️ Groq failed. Switching to Tier 3 (Local Ollama)...", groqError);

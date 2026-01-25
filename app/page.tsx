@@ -1,106 +1,76 @@
 "use client";
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase-client"; 
-import { processLog, generateDailyQuests, resetAccount } from "./actions";
-import { getAchievements, saveAchievement } from "./achievement-actions";
-import { saveQuestsToHistory } from "./quest-history-actions";
-import { Achievement, Quest, Item } from "./types";
-import { v4 as uuidv4 } from "uuid";
-import { checkForLoot, getInventory } from "@/lib/item-actions";
+
+import { useState, useEffect, useMemo } from "react";
+import { supabase } from "@/lib/supabase-client";
+import { resetAccount } from "./actions";
+import { getAchievements } from "./achievement-actions";
+import { getInventory } from "@/lib/item-actions";
 import { checkBossSpawn, fightBoss } from "@/lib/boss-actions";
+import { Achievement, Quest, Item, User } from "./types";
 import { Boss } from "@/lib/schema";
 import AuthForm from "./components/AuthForm";
 import Header from "./components/Header";
 import GenerateButton from "./components/GenerateButton";
 import QuestList from "./components/QuestList";
 import Achievements from "./components/Achievements";
+import LootPopup from "./components/game/LootPopup";
+import Inventory from "./components/game/Inventory";
+import BossAlert from "./components/game/BossAlert";
+import BossBattle from "./components/game/BossBattle";
+import Hud from "./components/game/Hud";
+import { calculateLevel } from "@/lib/utils";
 
-function calculateLevel(xp: number): {
-    level: number;
-    currentXP: number;
-    xpForNextLevel: number;
-} {
-    let level = 1;
-    let xpRemaining = xp;
-    let xpNeeded = 100;
-
-    while (xpRemaining >= xpNeeded) {
-        xpRemaining -= xpNeeded;
-        level++;
-        xpNeeded = Math.floor(100 * Math.pow(1.5, level - 1));
-    }
-
-    return { level, currentXP: xpRemaining, xpForNextLevel: xpNeeded };
-}
-
-// --- MAIN PAGE ---
-export default function Home() {
-    // Auth State
-    const [user, setUser] = useState<any>(null);
+function useGameLogic() {
+    const [user, setUser] = useState<User | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
-
-    // Game State
     const [quests, setQuests] = useState<Quest[]>([]);
     const [achievements, setAchievements] = useState<Achievement[]>([]);
     const [totalXP, setTotalXP] = useState(0);
-    const [loading, setLoading] = useState(false); // Action loading
-    
-    // UI State
-    const [showAchievements, setShowAchievements] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [inventory, setInventory] = useState<Item[]>([]);
-    const [showInventory, setShowInventory] = useState(false);
-    const [newLoot, setNewLoot] = useState<Item | null>(null);
     const [activeBoss, setActiveBoss] = useState<Boss | null>(null);
-    const [showBossModal, setShowBossModal] = useState(false);
     const [battleLog, setBattleLog] = useState<string[]>([]);
 
-    const levelInfo = calculateLevel(totalXP);
     const loadGameData = async (userId: string) => {
-        // Fetch specific user data from DB
         const savedAchievements = await getAchievements(userId);
-        const savedInventory = await getInventory(userId);
-        
-        // Calculate XP from achievements (or store in DB, but this is easier for now)
+        const savedInventory = (await getInventory(userId)).sort(
+            (a, b) => b.power - a.power
+        );
         const calculatedXP = savedAchievements.reduce((sum, a) => sum + (a.xp * a.count), 0);
-        
         setAchievements(savedAchievements);
         setInventory(savedInventory);
         setTotalXP(calculatedXP);
 
-        // Check for active boss
-        // We pass the calculated level to check if a boss should appear
         const currentLevel = calculateLevel(calculatedXP).level;
         const boss = await checkBossSpawn(userId, currentLevel);
         if (boss) {
             setActiveBoss(boss);
-            if (boss.status === 'ALIVE') setShowBossModal(true);
+            if (boss.status === 'ALIVE') {
+                // Assuming you have a way to show the boss modal
+            }
         }
     };
-    const checkUser = async () => {
-        const { data } = await supabase.auth.getUser();
-        if (data.user) {
-            setUser(data.user);
-            await loadGameData(data.user.id);
-        }
-        setAuthLoading(false);
-    };
-    // 1. Initial Load: Check Login & Fetch Data
+
     useEffect(() => {
+        const checkUser = async () => {
+            const { data } = await supabase.auth.getUser();
+            if (data.user) {
+                setUser(data.user);
+                await loadGameData(data.user.id);
+            }
+            setAuthLoading(false);
+        };
         checkUser();
     }, []);
 
-    if (authLoading) return <div className="bg-black min-h-screen flex items-center justify-center text-white">Loading...</div>;
-    if (!user) return <AuthForm onLogin={checkUser} />;
-
     const handleFight = async () => {
-        if (!activeBoss) return;
+        if (!activeBoss || !user) return;
         setLoading(true);
 
-        const bestItems = inventory.slice(0, 3).map((i) => i.id);
+        const equippedItems = inventory.filter((i) => i.equipped).map((i) => i.id);
+        const result = await fightBoss(user.id, activeBoss.uniqueId, equippedItems);
 
-        const result = await fightBoss(user.id, activeBoss.uniqueId, bestItems);
-            
-        if (!result || typeof result.remainingHp !== 'number') {
+        if (!result || !("remainingHp" in result)) {
             alert("Something went wrong with the battle.");
             setLoading(false);
             return;
@@ -113,7 +83,6 @@ export default function Home() {
         if (result?.newStatus === "DEFEATED") {
             alert(`VICTORY! You defeated ${activeBoss.name}!`);
             setActiveBoss(null);
-            setShowBossModal(false);
         } else {
             setActiveBoss((prev) =>
                 prev ? { ...prev, hp: result.remainingHp } : null,
@@ -121,256 +90,164 @@ export default function Home() {
         }
         setLoading(false);
     };
-
+    
     const handleReset = async () => {
-        if (confirm("HARD RESET: Are you sure? This will wipe your Level, Items, and History.")) {
-            // PASS USER ID
+        if (user && confirm("HARD RESET: Are you sure? This will wipe your Level, Items, and History.")) {
             await resetAccount(user.id);
-            window.location.reload(); 
+            window.location.reload();
         }
     };
-        
-    const bestPower = inventory
-        .sort((a, b) => b.power - a.power)
-        .slice(0, 3)
-        .reduce((sum, i) => sum + i.power, 0);
+    
+    const handleNewDay = () => {
+        if (confirm("Start a new day? Current quests will be lost.")) {
+            setQuests([]);
+        }
+    };
+    
+    const refetch = () => {
+        if (user) {
+            loadGameData(user.id);
+        }
+    };
+
+    return {
+        user,
+        authLoading,
+        quests,
+        setQuests,
+        achievements,
+        setAchievements,
+        totalXP,
+        setTotalXP,
+        loading,
+        setLoading,
+        inventory,
+        setInventory,
+        activeBoss,
+        battleLog,
+        handleFight,
+        handleReset,
+        handleNewDay,
+        refetch,
+        checkUser: () => {
+            const check = async () => {
+                const { data } = await supabase.auth.getUser();
+                if (data.user) {
+                    setUser(data.user);
+                    await loadGameData(data.user.id);
+                }
+                setAuthLoading(false);
+            };
+            check();
+        }
+    };
+}
+
+// --- MAIN PAGE ---
+export default function Home() {
+    const {
+        user,
+        authLoading,
+        quests,
+        setQuests,
+        achievements,
+        setAchievements,
+        totalXP,
+        setTotalXP,
+        loading,
+        setLoading,
+        inventory,
+        setInventory,
+        activeBoss,
+        battleLog,
+        handleFight,
+        handleReset,
+        handleNewDay,
+        refetch,
+        checkUser
+    } = useGameLogic();
+    
+    const [showAchievements, setShowAchievements] = useState(false);
+    const [showInventory, setShowInventory] = useState(false);
+    const [newLoot, setNewLoot] = useState<Item | null>(null);
+    const [showBossModal, setShowBossModal] = useState(false);
+
+    const levelInfo = calculateLevel(totalXP);
+    const bestPower = useMemo(() => {
+        return inventory
+            .filter((i) => i.equipped)
+            .reduce((sum, i) => sum + i.power, 0);
+    }, [inventory]);
+
+    if (authLoading) {
+        return (
+            <div className="bg-black min-h-screen flex items-center justify-center text-white">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-500"></div>
+            </div>
+        );
+    }
+    
+    if (!user) return <AuthForm onLogin={checkUser} />;
 
     return (
-        <main className="min-h-screen bg-black text-white p-4 max-w-md mx-auto font-sans">
-            {/* HEADER */}
+        <main className="min-h-screen bg-black text-white p-4 max-w-2xl mx-auto font-sans">
             <Header levelInfo={levelInfo} totalXP={totalXP} />
 
-            {/* GENERATE BUTTON */}
-            {quests.length === 0 && (<GenerateButton user={user} loading={loading} setLoading={setLoading} setQuests={setQuests} />)}
-
-            {/* QUEST LIST */}
-            <QuestList user={user} achievements={achievements} quests={quests} setTotalXP={setTotalXP} setQuests={setQuests} setInventory={setInventory} setNewLoot={setNewLoot} setAchievements={setAchievements} />
-
-            {/* ACHIEVEMENTS SECTION */}
-            {showAchievements && ( <Achievements achievements={achievements} setShowAchievements={setShowAchievements} />)}
-
-            {/* BOTTOM BUTTONS */}
-            <div className="fixed bottom-6 right-6 flex gap-2">
-                <button 
-                    onClick={handleReset}
-                    className="bg-red-900/50 text-red-500 p-3 rounded-full shadow-lg border border-red-900/50 hover:bg-red-900 hover:text-white transition-all"
-                    title="Reset Character">
-                    💀
-                </button>
-                <button
-                    onClick={() => setShowInventory(true)}
-                    className="bg-blue-900 text-blue-100 p-3 rounded-full shadow-lg border border-blue-700">
-                    🎒
-                </button>
-                <button
-                    onClick={() => setShowAchievements(true)}
-                    className="bg-yellow-700 text-yellow-100 p-3 rounded-full shadow-lg border border-yellow-600">
-                    🏆
-                </button>
-                {quests.length > 0 && (
-                    <button
-                        onClick={() => {
-                            if (confirm("Start a new day? Current quests will be lost.")) {
-                                setQuests([]);
-                            }
-                        }}
-                        className="bg-gray-800 text-gray-400 p-3 rounded-full shadow-lg border border-gray-700">
-                        🔄
-                    </button>
-                )}
-            </div>
-
-            {/* LOOT POPUP */}
-            {newLoot && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-                    <div className="bg-gradient-to-b from-gray-900 to-black border-2 border-yellow-500 rounded-2xl p-6 max-w-sm w-full text-center shadow-[0_0_50px_rgba(234,179,8,0.3)]">
-                        <h2 className="text-yellow-500 font-bold tracking-widest text-sm mb-2 animate-pulse">
-                            LOOT DROPPED!
-                        </h2>
-                        <div className="text-6xl mb-4 animate-bounce">
-                            {newLoot.emoji}
-                        </div>
-                        <h3
-                            className={`text-2xl font-bold mb-2 ${
-                                newLoot.rarity === "LEGENDARY"
-                                    ? "text-orange-500"
-                                    : newLoot.rarity === "EPIC"
-                                        ? "text-purple-500"
-                                        : newLoot.rarity === "RARE"
-                                            ? "text-blue-400"
-                                            : "text-gray-300"
-                            }`}>
-                            {newLoot.name}
-                        </h3>
-                        <div className="text-xs font-mono bg-gray-800 inline-block px-2 py-1 rounded mb-4 text-gray-400 uppercase">
-                            {newLoot.rarity} {newLoot.type}
-                        </div>
-                        <p className="text-gray-400 italic mb-6">
-                            &quot;{newLoot.description}&quot;
-                        </p>
-                        <button
-                            onClick={() => setNewLoot(null)}
-                            className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 rounded-xl transition-all">
-                            Collect
-                        </button>
-                    </div>
-                </div>
+            {quests.length === 0 && (
+                <GenerateButton 
+                    user={user} 
+                    loading={loading} 
+                    setLoading={setLoading} 
+                    setQuests={setQuests} />
             )}
 
-            {/* INVENTORY MODAL */}
+            {quests.length > 0 && (
+                <QuestList 
+                    user={user} 
+                    achievements={achievements} 
+                    quests={quests} 
+                    setTotalXP={setTotalXP} 
+                    setQuests={setQuests} 
+                    setInventory={setInventory} 
+                    setNewLoot={setNewLoot} 
+                    setAchievements={setAchievements}
+                    level={levelInfo.level} />
+            )}
+
+            {showAchievements && (
+                <Achievements 
+                    achievements={achievements} 
+                    setShowAchievements={setShowAchievements} />
+            )}
+
+            <Hud 
+                onReset={handleReset} 
+                onShowInventory={() => setShowInventory(true)} 
+                onShowAchievements={() => setShowAchievements(true)} 
+                onNewDay={handleNewDay} 
+                showNewDayButton={quests.length > 0}/>
+
+            {newLoot && <LootPopup newLoot={newLoot} onClose={() => setNewLoot(null)} />}
             {showInventory && (
-                <div className="fixed inset-0 bg-black/95 z-50 p-4 overflow-y-auto">
-                    <div className="max-w-md mx-auto">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
-                                Inventory ({inventory.length})
-                            </h2>
-                            <button
-                                onClick={() => setShowInventory(false)}
-                                className="text-gray-400 text-2xl">
-                                ✕
-                            </button>
-                        </div>
-                        {inventory.length === 0 ? (
-                            <div className="text-center text-gray-500 py-10">
-                                Your bag is empty. Complete quests to find loot!
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-2 gap-3">
-                                {inventory.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className={`p-3 rounded-lg border bg-gray-900/50 flex flex-col items-center text-center gap-2
-                                        ${
-                                    item.rarity === "LEGENDARY"
-                                        ? "border-orange-500/50 shadow-orange-900/20"
-                                        : item.rarity === "EPIC"
-                                            ? "border-purple-500/50"
-                                            : item.rarity === "RARE"
-                                                ? "border-blue-500/50"
-                                                : "border-gray-800"
-                                    }`}>
-                                        <div className="text-3xl">
-                                            {item.emoji}
-                                        </div>
-                                        <div className="text-sm font-bold truncate w-full">
-                                            {item.name}
-                                        </div>
-                                        <div
-                                            className={`text-[10px] uppercase font-mono ${
-                                                item.rarity === "LEGENDARY"
-                                                    ? "text-orange-400"
-                                                    : item.rarity === "EPIC"
-                                                        ? "text-purple-400"
-                                                        : item.rarity === "RARE"
-                                                            ? "text-blue-400"
-                                                            : "text-gray-500"
-                                            }`}>
-                                            {item.rarity}
-                                        </div>
-                                        <div className="absolute top-2 left-2 bg-black/50 px-1 rounded text-[10px] font-bold text-yellow-500 border border-yellow-500/30">
-                                            ⚡ {item.power}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <Inventory
+                    inventory={inventory}
+                    onClose={() => setShowInventory(false)}
+                    userId={user.id}
+                    refetch={refetch}/>
             )}
-
-            {/* BOSS ALERT BUTTON */}
+            
             {activeBoss && !showBossModal && (
-                <button
-                    onClick={() => setShowBossModal(true)}
-                    className="fixed bottom-24 right-6 bg-red-600 text-white w-14 h-14 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.7)] animate-bounce border-2 border-red-900 z-40 flex items-center justify-center font-bold text-xs">
-                    BOSS!
-                </button>
+                <BossAlert onClick={() => setShowBossModal(true)} />
             )}
 
-            {/* BOSS BATTLE MODAL */}
             {showBossModal && activeBoss && (
-                <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col p-4 animate-in fade-in duration-300">
-                    <div className="flex justify-between items-start mb-6">
-                        <h2 className="text-3xl font-black text-red-600 tracking-widest uppercase">
-                            Boss Battle
-                        </h2>
-                        <button
-                            onClick={() => setShowBossModal(false)}
-                            className="text-gray-500 text-2xl">
-                            ✕
-                        </button>
-                    </div>
-
-                    <div className="flex-1 flex flex-col items-center justify-center space-y-6">
-                        <div className="text-8xl animate-pulse">👹</div>
-                        <div className="text-center">
-                            <h3 className="text-2xl font-bold text-white">
-                                {activeBoss.name}
-                            </h3>
-                            <p className="text-red-400 italic">
-                                &quot;{activeBoss.description}&quot;
-                            </p>
-                        </div>
-
-                        <div className="w-full max-w-xs bg-gray-900 h-8 rounded-full border-2 border-gray-700 relative overflow-hidden">
-                            <div
-                                className="h-full bg-red-600 transition-all duration-500"
-                                style={{
-                                    width: `${(activeBoss.hp / activeBoss.maxHp) * 100}%`,
-                                }}/>
-                            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">
-                                {activeBoss.hp} / {activeBoss.maxHp} HP
-                            </div>
-                        </div>
-
-                        <div className="w-full max-w-xs bg-gray-900/50 p-4 rounded-lg h-32 overflow-y-auto text-sm space-y-2 border border-gray-800">
-                            {battleLog.length === 0 ? (
-                                <p className="text-gray-500 text-center italic">
-                                    The beast awaits your move...
-                                </p>
-                            ) : (
-                                battleLog.map((log, i) => (
-                                    <p
-                                        key={i}
-                                        className="text-gray-300 border-b border-gray-800 pb-1 last:border-0">
-                                        {log}
-                                    </p>
-                                ))
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="mt-6">
-                        <div className="mb-4 bg-gray-900 p-3 rounded-lg border border-gray-700">
-                            <div className="flex justify-between text-sm mb-1">
-                                <span className="text-gray-400">Your Power</span>
-                                <span className="text-gray-400">Boss Defense</span>
-                            </div>
-                            <div className="flex justify-between font-bold text-xl">
-                                <span className={bestPower >= activeBoss.defense ? "text-green-500" : "text-red-500"}>
-                                    ⚡ {bestPower}
-                                </span>
-                                <span className="text-white">🛡️ {activeBoss.defense}</span>
-                            </div>
-                            {bestPower < activeBoss.defense && (
-                                <p className="text-red-400 text-xs mt-2 text-center">
-                                    ⚠️ You are too weak! Find better loot first.
-                                </p>
-                            )}
-                        </div>
-                        <button
-                            onClick={handleFight}
-                            disabled={loading}
-                            className="w-full bg-red-700 hover:bg-red-600 text-white font-black text-xl py-6 rounded-2xl shadow-[0_0_30px_rgba(220,38,38,0.4)] border-t-4 border-red-500 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100">
-                            {loading ? "ATTACKING..." : "⚔️ ATTACK"}
-                        </button>
-                        <p className="text-center text-gray-500 text-xs mt-3">
-                            Attacking uses your top 3 inventory items
-                            automatically.
-                        </p>
-                    </div>
-                </div>
+                <BossBattle
+                    activeBoss={activeBoss}
+                    bestPower={bestPower}
+                    battleLog={battleLog}
+                    loading={loading}
+                    onClose={() => setShowBossModal(false)}
+                    onFight={handleFight}/>
             )}
         </main>
     );

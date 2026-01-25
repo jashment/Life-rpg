@@ -6,7 +6,10 @@ import { eq, and, inArray } from "drizzle-orm";
 import { v4 as uuidv4 } from 'uuid';
 import { generateAIContent } from "../app/ai-service";
 
-async function generateBoss(userId: string, level: number) {
+async function generateBoss(
+    userId: string,
+    level: number
+): Promise<Boss | null> {
 
     const defense = level * 30;
   
@@ -26,22 +29,27 @@ async function generateBoss(userId: string, level: number) {
 
     if (!data || data.type === 'ERROR') return null;
 
-    const [newBoss] = await db.insert(bosses).values({
-        userId: userId,
-        uniqueId: uuidv4(),
-        name: data.name,
-        description: data.description,
-        level: level,
-        hp: data.hp,
-        maxHp: data.hp,
-        status: 'ALIVE',
-        defense: defense,
-    }).returning();
+    const [newBoss] = await db
+        .insert(bosses)
+        .values({
+            ...data,
+            userId: userId,
+            uniqueId: uuidv4(),
+            level: level,
+            maxHp: data.hp,
+            status: "ALIVE",
+            defense: defense,
+        })
+        .returning();
 
     return newBoss;
 }
 
-export async function checkBossSpawn(userId: string, userLevel: number) {
+import { Boss } from "./schema";
+export async function checkBossSpawn(
+    userId: string,
+    userLevel: number
+): Promise<Boss | null> {
     // Bosses appear at level 5, 10, 15, etc.
     if (userLevel % 5 !== 0) return null;
 
@@ -65,38 +73,19 @@ export async function checkBossSpawn(userId: string, userLevel: number) {
 
 
 
-// 2. FIGHT LOGIC
-export async function fightBoss(userId: string, bossId: string, itemIds: string[]) {
-    // Get the boss
-    const [boss] = await db.select().from(bosses).where(
-        and(
-            eq(bosses.uniqueId, bossId),
-            eq(bosses.userId, userId)
-        )
-    );
-    if (!boss || boss.status !== 'ALIVE') return { result: 'ERROR' };
-
-    // Get the items used
-    // In a real app we would query whereIn(items.uniqueId, itemIds)
-    // For simplicity, we assume we passed the item details or fetch all
-    let equipped: any[] = [];
-    if (itemIds.length > 0) {
-        equipped = await db.select().from(items).where(
-            and(
-                eq(items.userId, userId),
-                inArray(items.uniqueId, itemIds)
-            )
-        );
+type FightBossResponse =
+  | {
+      win: boolean;
+      log: string;
+      damageDealt: number;
+      remainingHp: number;
+      bossName: string;
+      newStatus: "ALIVE" | "DEFEATED";
     }
-    const playerPower = equipped.reduce((sum, item) => sum + (item.power || 0), 0);
+  | { result: "ERROR" };
 
-    const powerRatio = playerPower / (boss.defense || 1);
-    const winChance = Math.min(0.95, Math.max(0.1, powerRatio - 0.2));
-
-    const roll = Math.random();
-    const isWin = roll < winChance;
-
-    const prompt = `
+function getBattlePrompt(playerPower: number, boss: Boss, isWin: boolean, equipped: Item[]) {
+    return `
     BATTLE SIMULATION:
     Player Power: ${playerPower}
     Boss: ${boss.name} (HP: ${boss.hp})
@@ -121,6 +110,44 @@ export async function fightBoss(userId: string, bossId: string, itemIds: string[
     RETURN JSON:
     { "win": boolean, "log": "You struck the dragon...", "damageDealt": number }
   `;
+}
+
+// 2. FIGHT LOGIC
+export async function fightBoss(
+    userId: string,
+    bossId: string,
+    itemIds: string[]
+): Promise<FightBossResponse | null> {
+    // Get the boss
+    const [boss] = await db.select().from(bosses).where(
+        and(
+            eq(bosses.uniqueId, bossId),
+            eq(bosses.userId, userId)
+        )
+    );
+    if (!boss || boss.status !== 'ALIVE') return { result: 'ERROR' };
+
+    // Get the items used
+    // In a real app we would query whereIn(items.uniqueId, itemIds)
+    // For simplicity, we assume we passed the item details or fetch all
+    let equipped: Item[] = [];
+    if (itemIds.length > 0) {
+        equipped = await db.select().from(items).where(
+            and(
+                eq(items.userId, userId),
+                inArray(items.uniqueId, itemIds)
+            )
+        );
+    }
+    const playerPower = equipped.reduce((sum, item) => sum + (item.power || 0), 0);
+
+    const powerRatio = playerPower / (boss.defense || 1);
+    const winChance = Math.min(0.95, Math.max(0.1, powerRatio - 0.2));
+
+    const roll = Math.random();
+    const isWin = roll < winChance;
+
+    const prompt = getBattlePrompt(playerPower, boss, isWin, equipped);
 
     const battle = await generateAIContent(prompt);
 
@@ -152,6 +179,6 @@ export async function fightBoss(userId: string, bossId: string, itemIds: string[
         damageDealt,
         remainingHp, 
         bossName: boss.name,
-        newStatus 
+        newStatus: newStatus as "ALIVE" | "DEFEATED",
     };
 }
