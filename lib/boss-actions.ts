@@ -22,30 +22,34 @@ async function generateBoss(
     HP should be approx ${level * 100}, Defense should be approx ${defense}
     
     RETURN JSON:
-    { "name": "Name", "description": "Scary description", "hp": 500 }
+    { "name": "Name", "description": "Scary description", "hp": 500, "emoji": "👹" }
   `;
 
     const data = await generateAIContent(prompt);
 
-    if (!data || data.type === 'ERROR') return null;
+    if (!data || !data.name || !data.description || !data.hp || !data.emoji) return null;
 
+    const newBossData = {
+        name: data.name,
+        description: data.description,
+        emoji: data.emoji,
+        hp: data.hp,
+        userId: userId,
+        uniqueId: uuidv4(),
+        level: level,
+        maxHp: data.hp,
+        status: "ALIVE",
+        defense: defense || 100,
+    };
     const [newBoss] = await db
         .insert(bosses)
-        .values({
-            ...data,
-            userId: userId,
-            uniqueId: uuidv4(),
-            level: level,
-            maxHp: data.hp,
-            status: "ALIVE",
-            defense: defense,
-        })
+        .values(newBossData)
         .returning();
 
     return newBoss;
 }
 
-import { Boss } from "./schema";
+import { Boss, Item } from "./schema";
 export async function checkBossSpawn(
     userId: string,
     userLevel: number
@@ -151,15 +155,15 @@ export async function fightBoss(
 
     const battle = await generateAIContent(prompt);
 
-    if (!battle || battle.type === 'ERROR') return null;
+    if (!battle) return null;
     
     const battleLog = battle?.log || (isWin ? "You defeated the boss!" : "You took a hit but survived.");
   
-    const damageDealt = isWin ? boss.hp : Math.floor(boss.hp * 0.1);
+    const damageDealt = battle.damageDealt || (isWin ? boss.hp : Math.floor(boss.hp * 0.1));
 
     // Update DB
     let newStatus = 'ALIVE';
-    let remainingHp = boss.hp - battle.damageDealt;
+    let remainingHp = boss.hp - damageDealt;
   
     if (battle.win || remainingHp <= 0) {
         newStatus = 'DEFEATED';

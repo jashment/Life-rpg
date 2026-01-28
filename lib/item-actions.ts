@@ -73,7 +73,7 @@ export async function checkForLoot(
     try {
         const data = await generateAIContent(prompt); // <--- Handles Gemini OR Ollama automatically
 
-        if (!data || data.type === 'ERROR') return null;
+        if (!data || !data.name || !data.description || !data.emoji || !data.power) return null;
 
         const placements = ["HEAD", "HAND", "CHEST", "LEGS", "FEET", "RING"];
         let placement = data.placement;
@@ -83,7 +83,7 @@ export async function checkForLoot(
 
         // 4. Save to Drizzle DB
         const newId = uuidv4();
-        await db.insert(items).values({
+        const newItemData = {
             userId: userId,
             uniqueId: newId,
             name: data.name,
@@ -93,7 +93,8 @@ export async function checkForLoot(
             type: data.type,
             power: data.power,
             placement: placement
-        });
+        };
+        await db.insert(items).values(newItemData);
 
         // Return the item object to display in UI
         return {
@@ -135,11 +136,11 @@ export async function equipItem(userId: string, itemId: string, placement: strin
 }
 
 export async function unequipItem(userId: string, itemId: string) {
-    await db.update(items).set({ equipped: false, slot: 0 }).where(eq(items.userId, userId)).where(eq(items.uniqueId, itemId));
+    await db.update(items).set({ equipped: false, slot: 0 }).where(and(eq(items.userId, userId), eq(items.uniqueId, itemId)));
 }
 
 export async function getEquippedItems(userId: string): Promise<Item[]> {
-    const result = await db.select().from(items).where(eq(items.userId, userId)).where(eq(items.equipped, true));
+    const result = await db.select().from(items).where(and(eq(items.userId, userId), eq(items.equipped, true)));
     return result.map(i => ({
         id: i.uniqueId,
         name: i.name,

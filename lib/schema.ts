@@ -52,6 +52,7 @@ export const bosses = pgTable("bosses", {
     uniqueId: text("unique_id").notNull(),
     name: text("name").notNull(),
     description: text("description").notNull(),
+    emoji: text("emoji").notNull(),
     level: integer("level").notNull(),
     hp: integer("hp").notNull(),
     maxHp: integer("max_hp").notNull(),

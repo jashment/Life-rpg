@@ -1,7 +1,7 @@
 'use server'
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Achievement } from "./types";
+import { Achievement, GeneratedQuest } from "./types";
 import { getRecentQuests } from "./quest-history-actions";
 import { generateAIContent } from "./ai-service";
 import { items, skills, bosses, achievements, questHistory } from "@/lib/schema";
@@ -62,12 +62,7 @@ export async function processLog(
 }
 
 type GenerateDailyQuestsResponse = {
-  quests: {
-    title: string;
-    task: string;
-    xp: number;
-    type: string;
-  }[];
+  quests: GeneratedQuest[];
 } | {
     type: "ERROR";
     message: string;
